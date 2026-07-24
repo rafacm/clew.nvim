@@ -1,0 +1,17 @@
+# build output
+bin/
+*.exe
+
+# clew working directories
+.clew/
+*.scip
+
+# per-unit indexing artifacts
+target/
+node_modules/
+.clew-unit.scip
+
+# editor / OS
+.DS_Store
+*.swp
+tags

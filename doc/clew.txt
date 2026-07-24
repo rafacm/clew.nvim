@@ -1,0 +1,123 @@
+*clew.txt*    Ariadne's thread for your codebase
+
+                                                                        *clew*
+                                                                   *clew.nvim*
+==============================================================================
+CONTENTS                                                       *clew-contents*
+
+  1. Introduction .......................................... |clew-intro|
+  2. Requirements .......................................... |clew-requirements|
+  3. Setup ................................................. |clew-setup|
+  4. Commands .............................................. |clew-commands|
+  5. Configuration ......................................... |clew-config|
+  6. Root detection ........................................ |clew-root|
+  7. Limitations ........................................... |clew-limitations|
+
+==============================================================================
+1. INTRODUCTION                                                   *clew-intro*
+
+clew provides go-to-definition and find-references from a precomputed SCIP
+index, with no language server resident in your editor.
+
+The semantic work happens out-of-band: you run |:ClewIndex|, a real compiler
+produces the index, and your editor only ever queries a static file. You keep
+compiler-grade correctness and give up only freshness.
+
+This matters most for git-submodule umbrellas. A conventional language server
+starts one instance per project root -- fifty submodules means up to fifty
+JVMs, and none of them can navigate into another. clew produces one index for
+the whole tree and one server process, and resolves across submodule
+boundaries because SCIP symbols are globally-scoped strings.
+
+==============================================================================
+2. REQUIREMENTS                                             *clew-requirements*
+
+  - Neovim 0.11+ (for |vim.lsp.config|)
+  - the `clew` binary on $PATH, or built in the plugin directory via `make`
+
+Per language, only for what you actually index:
+
+  - Java/Kotlin ....... JDK 17+, Maven or Gradle
+  - TypeScript/JS ..... Node.js 18+
+
+==============================================================================
+3. SETUP                                                          *clew-setup*
+
+>lua
+    require("clew").setup()
+<
+See |clew-config| for options. No configuration is required.
+
+==============================================================================
+4. COMMANDS                                                    *clew-commands*
+
+                                                                 *:ClewIndex*
+:ClewIndex [{unit}]     Build or rebuild the project index. With {unit},
+                        rebuild only that unit -- much faster than a full
+                        rebuild when one submodule changed.
+
+                                                                *:ClewStatus*
+:ClewStatus             Show the resolved project root, the marker that
+                        matched, binary location, index size and age, and
+                        the number of attached clients.
+
+                                                               *:ClewRestart*
+:ClewRestart            Stop the clew language server; it reattaches on the
+                        next matching buffer.
+
+                                                          *clew-checkhealth*
+:checkhealth clew       Verify Neovim version, binary, toolchains, root
+                        detection and index presence.
+
+==============================================================================
+5. CONFIGURATION                                                 *clew-config*
+
+>lua
+    require("clew").setup({
+      index_path = ".clew/index.scip",
+      filetypes = { "java", "kotlin", "typescript", "typescriptreact",
+                    "javascript", "javascriptreact" },
+      root = {
+        markers = { ".clew/config.toml", ".clew/index.scip",
+                    ".gitmodules", ".git" },
+        include = {},
+        exclude = { "vendor/**", "third_party/**", "node_modules/**" },
+      },
+      auto_index = "never",      -- "never" | "save" | "manual"
+      staleness_check = true,
+      cmd = nil,                 -- override the server command entirely
+    })
+<
+==============================================================================
+6. ROOT DETECTION                                                  *clew-root*
+
+clew resolves the OUTERMOST directory containing a marker, not the nearest.
+
+This is deliberate and it is the whole point. Neovim's built-in `root_markers`
+returns the nearest ancestor, which in an umbrella repository matches the
+submodule's own `pom.xml` or `.git` -- producing one server per submodule and
+breaking navigation between them.
+
+To pin a root explicitly, create `.clew/config.toml` at the directory you want
+used. An explicit pin always wins, which is the escape hatch for nested
+umbrellas and other layouts the heuristic gets wrong.
+
+==============================================================================
+7. LIMITATIONS                                              *clew-limitations*
+
+Deliberately not provided: completion, diagnostics, formatting and rename. A
+static index is the wrong tool for those and would produce confidently wrong
+results. Attach a real language server if you need them; clew coexists with
+one.
+
+Not yet covered:
+
+  - Angular templates. scip-typescript indexes `.ts` and ignores `.html`.
+    Component members are symbolized correctly, so definitions exist -- what
+    is missing is references from templates.
+  - Infrastructure code. No SCIP indexer exists for HCL/Terraform or
+    Kubernetes YAML.
+  - Positions are UTF-8 based while LSP defaults to UTF-16; identical for
+    ASCII source, potentially off for non-ASCII lines.
+
+vim:tw=78:ts=8:noet:ft=help:norl:

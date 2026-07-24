@@ -2,11 +2,14 @@
 
 # clew.nvim 🧶
 
-**clew** *(n.)* a ball of thread; the origin of the word *clue*. [Ariadne's](https://en.wikipedia.org/wiki/Ariadne#Minos_and_Theseus) thread for your codebase.
+**clew** *(n.)* a ball of thread; the origin of the word *clue*.<br>
+[Ariadne's](https://en.wikipedia.org/wiki/Ariadne#Minos_and_Theseus) thread for your codebase.
 
-Go-to-definition and find-references served from a **precomputed [SCIP](https://scip-code.org) index**, with **no language server running inside your editor**.
+Go-to-definition and find-references served from a **precomputed [SCIP](https://scip-code.org) index**,<br>
+with **no language server running inside your editor**.
 
-Works with **any language that has a [SCIP indexer](https://scip-code.org)**, across **single repositories**, **git superprojects** (submodules) and **monorepos** alike.
+Works with **any language that has a [SCIP indexer](https://scip-code.org)**,<br>
+across **single repositories**, **git superprojects** (submodules) and **monorepos** alike.
 
 [Features](#features) • [Why](#why-a-precomputed-index) • [Getting Started](#getting-started) • [Usage](#usage) • [Commands](#commands) • [Integration](#integration-with-neovim) • [Related Projects](#related-projects) • [Credits](#credits)
 
@@ -240,9 +243,9 @@ clew is mostly *assembly*. The hard parts belong to other people.
 - **[scip-typescript](https://github.com/sourcegraph/scip-typescript)**: TypeScript and JavaScript indexing.
 - **[uber/scip-lsp](https://github.com/uber/scip-lsp)** (MIT): the closest existing SCIP-backed language server. **None of its code is used here.** It is the intended design reference for stale-buffer position mapping, which clew does not yet implement.
 - **[netmute/ctags-lsp](https://github.com/netmute/ctags-lsp)**: the architectural model, an external indexer behind a plain LSP server, so every editor's native client just works.
-- **[parrot.nvim](https://github.com/frankroeder/parrot.nvim)**: the shape and tone of this README.
+- **[parrot.nvim](https://github.com/frankroeder/parrot.nvim)**: the shape and tone of this README and an inspiration for the logo.
 - **[AstroNvim](https://github.com/AstroNvim/AstroNvim)** and [astrocommunity](https://github.com/AstroNvim/astrocommunity).
 
 ## License
 
-MIT
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Rafael Cordones.

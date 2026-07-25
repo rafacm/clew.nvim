@@ -31,6 +31,15 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
   `README.md` into a new `doc/README.md`, linked from a short "Background"
   section.
 
+### Fixed
+
+- The project builds. The SCIP Go bindings moved with the format's transfer to
+  the `scip-code` org and are now their own module, so the pinned
+  `github.com/sourcegraph/scip v0.6.0` predated the typed occurrence ranges
+  `internal/index/query.go` reads: it did not compile. Repinned to
+  `github.com/scip-code/scip/bindings/go/scip v0.9.0`.
+- `go.sum` is committed, so the repository builds from a clean checkout.
+
 ## 2026-07-24
 
 ### Added

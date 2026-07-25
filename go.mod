@@ -1,8 +1,10 @@
 module github.com/rafacm/clew
 
-go 1.24
+go 1.25.0
 
 require (
-	github.com/sourcegraph/scip v0.6.0
-	google.golang.org/protobuf v1.36.8
+	github.com/scip-code/scip/bindings/go/scip v0.9.0
+	google.golang.org/protobuf v1.36.11
 )
+
+require github.com/sourcegraph/beaut v0.0.0-20240611013027-627e4c25335a // indirect

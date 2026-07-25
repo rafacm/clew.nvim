@@ -1,24 +1,22 @@
 <div align="center">
 
+<img src="assets/clew-nvim.png" alt="clew.nvim logo" width="50%">
+
 # clew.nvim 🧶
 
 **clew** *(n.)* a ball of thread; the origin of the word *clue*.<br>
 [Ariadne's](https://en.wikipedia.org/wiki/Ariadne#Minos_and_Theseus) thread for your codebase.
 
-Go-to-definition and find-references served from a **precomputed [SCIP](https://scip-code.org) index**,<br>
-with **no language server running inside your editor**.
-
-Works with **any language that has a [SCIP indexer](https://scip-code.org)**,<br>
-across **single repositories**, **git superprojects** (submodules) and **monorepos** alike.
-
-[Features](#features) • [Why](#why-a-precomputed-index) • [Getting Started](#getting-started) • [Usage](#usage) • [Commands](#commands) • [Integration](#integration-with-neovim) • [Related Projects](#related-projects) • [Credits](#credits) • [Changelog](#changelog)
-
-<img src="assets/clew-nvim.png" alt="clew.nvim logo" width="50%">
+[What is it?](#what-is-clewnvim) • [Features](#features) • [Why](#why-a-precomputed-index) • [Getting Started](#getting-started) • [Usage](#usage) • [Commands](#commands) • [Integration](#integration-with-neovim) • [Related Projects](#related-projects) • [Credits](#credits) • [Changelog](#changelog)
 
 </div>
 
 > [!WARNING]
 > **Early development.** This README describes the intended v1. Sections marked 🚧 are not implemented yet. The indexing pipeline it is built on has been validated end-to-end (Java + Angular superproject, cross-file go-to-definition working); the plugin around it is new.
+
+## What is clew.nvim?
+
+A Neovim plugin that gives you go-to-definition and find-references served from a **precomputed [SCIP](https://scip-code.org) index**, with **no language server running inside your editor**. It works with **any language that has a [SCIP indexer](https://scip-code.org)**, across **single repositories**, **git superprojects** (submodules) and **monorepos** alike, and the answers are compiler-grade rather than heuristic, because the index was built by a real compiler.
 
 ## Features
 

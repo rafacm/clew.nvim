@@ -76,15 +76,12 @@ func Run(ctx context.Context, opts Options) error {
 			started := time.Now()
 			var path string
 			var err error
-			switch u.Kind {
-			case KindMaven:
-				path, err = r.indexMaven(ctx, u)
-			case KindTypeScript:
-				path, err = r.indexTypeScript(ctx, u)
-			case KindGradle:
-				err = fmt.Errorf("gradle units are not implemented yet")
-			default:
-				err = fmt.Errorf("unknown unit kind %q", u.Kind)
+			if p, ok := producerFor(u.Kind); ok {
+				path, err = p.Index(ctx, r, u)
+			} else {
+				// Unreachable while Discover is the only source of units: it only
+				// ever stamps a Kind a producer just claimed.
+				err = fmt.Errorf("no producer registered for unit kind %q", u.Kind)
 			}
 			if err != nil {
 				r.logf("  %-32s FAILED  %v", u.Prefix, err)

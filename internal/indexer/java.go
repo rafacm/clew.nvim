@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -12,8 +11,20 @@ import (
 // ScipVersion is the scip-java / scip-javac release clew drives.
 const ScipVersion = "0.13.1"
 
-// indexMaven indexes a Maven unit WITHOUT running the project's build and
-// WITHOUT modifying its pom.xml.
+// mavenProducer drives scip-javac over a Maven unit.
+type mavenProducer struct{}
+
+func (mavenProducer) Kind() Kind { return KindMaven }
+
+func (mavenProducer) Detect(dir string) (string, bool) {
+	if exists(filepath.Join(dir, "pom.xml")) {
+		return "pom.xml", true
+	}
+	return "", false
+}
+
+// Index indexes a Maven unit WITHOUT running the project's build and WITHOUT
+// modifying its pom.xml.
 //
 // The pipeline, validated end-to-end against spring-petclinic:
 //
@@ -37,8 +48,9 @@ const ScipVersion = "0.13.1"
 // merged, where every unit's symbols collapse into the same anonymous package.
 //
 // The documented `dependencies.txt` mechanism does NOT produce coordinates here;
-// javacopts.txt does. See TestMavenSymbolsCarryCoordinates.
-func (r *runner) indexMaven(ctx context.Context, u Unit) (string, error) {
+// javacopts.txt does. NOTES.md tracks this as TestMavenSymbolsCarryCoordinates,
+// which is not written yet.
+func (mavenProducer) Index(ctx context.Context, r *runner, u Unit) (string, error) {
 	targetroot := filepath.Join(u.Dir, "target", "clew-targetroot")
 	classes := filepath.Join(u.Dir, "target", "clew-classes")
 	for _, d := range []string{targetroot, classes} {
@@ -111,6 +123,24 @@ func (r *runner) indexMaven(ctx context.Context, u Unit) (string, error) {
 	return out, nil
 }
 
+// gradleProducer recognises Gradle units so `clew units` reports them honestly,
+// and fails with a clear message rather than a silent omission when asked to
+// index one.
+type gradleProducer struct{}
+
+func (gradleProducer) Kind() Kind { return KindGradle }
+
+func (gradleProducer) Detect(dir string) (string, bool) {
+	if exists(filepath.Join(dir, "build.gradle")) || exists(filepath.Join(dir, "build.gradle.kts")) {
+		return "build.gradle", true
+	}
+	return "", false
+}
+
+func (gradleProducer) Index(context.Context, *runner, Unit) (string, error) {
+	return "", fmt.Errorf("gradle units are not implemented yet")
+}
+
 // writeJavacOpts emits the file scip-java's aggregator reads to recover Maven
 // coordinates. Format: `-version` on the first line, then every javac option and
 // source file individually double-quoted, one per line.
@@ -137,15 +167,78 @@ func writeJavacOpts(targetroot, classes, classpath, unitDir string, sources []st
 // protobuf-java, and fails at plugin init with NoClassDefFoundError without them.
 // Resolving through a throwaway POM gets the real transitive closure.
 func (r *runner) scipJavacClasspath(ctx context.Context) (string, error) {
-	if r.cachedJavacCP != "" {
-		return r.cachedJavacCP, nil
+	return r.memo("scip-javac.classpath", func() (string, error) {
+		return resolveScipArtifact(ctx, r, "scip-javac")
+	})
+}
+
+// runScipJava invokes the scip-java CLI. The resolved classpath routinely exceeds
+// the shell's argument limit, so it goes through an @argfile.
+func (r *runner) runScipJava(ctx context.Context, dir string, args ...string) error {
+	argfile, err := r.scipJavaArgfile(ctx)
+	if err != nil {
+		return err
 	}
-	cp, err := r.resolveArtifact(ctx, "scip-javac")
+	full := append([]string{"@" + argfile, "org.scip_code.scip_java.ScipJava"}, args...)
+	return r.run(ctx, dir, "java", full...)
+}
+
+// scipJavaArgfile resolves the scip-java CLI and writes its @argfile, once per
+// run. Resolution and the write are memoised together on purpose: the argfile has
+// one fixed path under toolsDir, so units writing it concurrently would race on
+// the file another unit is handing to java.
+func (r *runner) scipJavaArgfile(ctx context.Context) (string, error) {
+	return r.memo("scip-java.argfile", func() (string, error) {
+		cp, err := resolveScipArtifact(ctx, r, "scip-java")
+		if err != nil {
+			return "", err
+		}
+		path := filepath.Join(r.toolsDir, "scip-java.args")
+		if err := os.WriteFile(path, []byte("-cp\n"+cp+"\n"), 0o644); err != nil {
+			return "", err
+		}
+		return path, nil
+	})
+}
+
+// resolveScipArtifact returns the full transitive classpath for an org.scip-code
+// artifact, using a throwaway POM so Maven does the resolution. The classpath is
+// cached on disk under toolsDir, so it survives across runs as well.
+//
+// Callers must reach this through runner.memo: it writes to a fixed path per
+// artifact and cannot be run concurrently for the same one.
+func resolveScipArtifact(ctx context.Context, r *runner, artifact string) (string, error) {
+	dir := filepath.Join(r.toolsDir, artifact)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	cpFile := filepath.Join(dir, "classpath.txt")
+
+	if b, err := os.ReadFile(cpFile); err == nil && len(b) > 0 {
+		return strings.TrimSpace(string(b)), nil
+	}
+
+	pom := fmt.Sprintf(`<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>dev.clew</groupId><artifactId>resolve-%s</artifactId><version>1</version>
+  <dependencies><dependency>
+    <groupId>org.scip-code</groupId><artifactId>%s</artifactId><version>%s</version>
+  </dependency></dependencies>
+</project>`, artifact, artifact, ScipVersion)
+
+	if err := os.WriteFile(filepath.Join(dir, "pom.xml"), []byte(pom), 0o644); err != nil {
+		return "", err
+	}
+	if err := r.run(ctx, dir, "mvn", "-B", "-q",
+		"dependency:build-classpath", "-Dmdep.outputFile="+cpFile,
+	); err != nil {
+		return "", fmt.Errorf("resolving %s: %w", artifact, err)
+	}
+	b, err := os.ReadFile(cpFile)
 	if err != nil {
 		return "", err
 	}
-	r.cachedJavacCP = cp
-	return cp, nil
+	return strings.TrimSpace(string(b)), nil
 }
 
 func collectSources(dir, ext string) ([]string, error) {
@@ -164,5 +257,3 @@ func collectSources(dir, ext string) ([]string, error) {
 	}
 	return out, err
 }
-
-var _ = exec.Command // keep os/exec imported for runner helpers

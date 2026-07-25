@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-// Kind identifies which indexer handles a unit.
+// Kind identifies which indexer handles a unit. Every Kind is owned by exactly
+// one Producer; see producer.go.
 type Kind string
 
 const (
@@ -78,7 +79,9 @@ func Discover(root string) ([]Unit, error) {
 	return units, nil
 }
 
-// classify decides whether dir is a unit root, and of what kind.
+// classify decides whether dir is a unit root, and of what kind, by asking each
+// registered producer in precedence order. It holds no knowledge of any specific
+// language: that lives in the producers.
 func classify(root, dir string) (Unit, bool) {
 	rel, err := filepath.Rel(root, dir)
 	if err != nil {
@@ -89,21 +92,10 @@ func classify(root, dir string) (Unit, bool) {
 	}
 	rel = filepath.ToSlash(rel)
 
-	mk := func(kind Kind, file string) (Unit, bool) {
-		return Unit{Prefix: rel, Dir: dir, BuildFile: file, Kind: kind}, true
-	}
-
-	// TypeScript is checked first: an Angular or Node project may sit beside a
-	// pom.xml in the same repo, and package.json is the more specific signal.
-	if exists(filepath.Join(dir, "package.json")) &&
-		(exists(filepath.Join(dir, "tsconfig.json")) || exists(filepath.Join(dir, "angular.json"))) {
-		return mk(KindTypeScript, "package.json")
-	}
-	if exists(filepath.Join(dir, "pom.xml")) {
-		return mk(KindMaven, "pom.xml")
-	}
-	if exists(filepath.Join(dir, "build.gradle")) || exists(filepath.Join(dir, "build.gradle.kts")) {
-		return mk(KindGradle, "build.gradle")
+	for _, p := range producers {
+		if file, ok := p.Detect(dir); ok {
+			return Unit{Prefix: rel, Dir: dir, BuildFile: file, Kind: p.Kind()}, true
+		}
 	}
 	return Unit{}, false
 }

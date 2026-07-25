@@ -9,6 +9,13 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ### Added
 
+- Producer registry in `internal/indexer`. A language is now one `Producer`
+  implementation plus one line in the registry, where it used to be three
+  coordinated edits across `discover.go` and `run.go` with no compiler check
+  tying them together. Registry order is the detection precedence, so the
+  TypeScript-before-Maven rule is expressed rather than commented.
+- `runner.memo`, a per-run cache for cross-unit resolutions such as a
+  classpath or, later, a virtualenv.
 - `doc/README.md` cites four more pieces of prior art: clangd's remote index
   (the production precedent for the whole architecture, and the reference
   design for staleness), `scip-io` (the closest existing thing to clew's
@@ -39,6 +46,13 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
   `internal/index/query.go` reads: it did not compile. Repinned to
   `github.com/scip-code/scip/bindings/go/scip v0.9.0`.
 - `go.sum` is committed, so the repository builds from a clean checkout.
+- Data race indexing more than one Maven unit. Units index concurrently and
+  share one `runner`, whose `cachedJavacCP` and `cachedCLICP` fields were read
+  and written from every goroutine without synchronisation. The same bug had
+  two file-level counterparts: parallel `mvn dependency:build-classpath` runs
+  writing one `classpath.txt`, and units overwriting the single
+  `scip-java.args` argfile while another handed it to `java`. All three now go
+  through `runner.memo`.
 
 ## 2026-07-24
 

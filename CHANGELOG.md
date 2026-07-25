@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest first.
 
+## 2026-07-25
+
+### Changed
+
+- `README.md` restructured: the logo leads the header, the nav bar sits directly
+  under the title, and a new "What is clew.nvim?" section answers that question
+  in one paragraph.
+- "Project shapes" folded into "Features", which is now one flat section with
+  links to the tools, formats and Neovim features it names.
+- "Why a precomputed index?", "Related Projects" and "Credits" moved out of
+  `README.md` into a new `doc/README.md`, linked from a short "Background"
+  section.
+
 ## 2026-07-24
 
 ### Added

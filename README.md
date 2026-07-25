@@ -16,7 +16,7 @@
 
 ## What is clew.nvim?
 
-A Neovim plugin that gives you go-to-definition and find-references served from a **precomputed [SCIP](https://scip-code.org) index**, with **no language server running inside your editor**. It works with **any language that has a [SCIP indexer](https://scip-code.org)**, across **single repositories**, **git superprojects** (submodules) and **monorepos** alike, and the answers are compiler-grade rather than heuristic, because the index was built by a real compiler.
+A Neovim plugin that gives you go-to-definition and find-references served from a **precomputed [SCIP](https://scip-code.org) index**, with **no language server running inside your editor**. It works across **single repositories**, **git superprojects** (submodules) and **monorepos** alike, and the answers are compiler-grade rather than heuristic, because the index was built by a real compiler. Java/Kotlin and TypeScript/JavaScript are wired up today; every other [SCIP indexer](https://scip-code.org) is an addition to clew, never a change to your editor.
 
 ## Features
 
@@ -26,7 +26,7 @@ Instead of running a semantic engine *inside* your editor, `clew.nvim` runs it *
 - **Compiler-grade, not heuristic.** [`scip-java`](https://github.com/scip-code/scip-java) indexes through [`javac`](https://docs.oracle.com/en/java/javase/21/docs/specs/man/javac.html) itself, so you get real overload resolution, real generics and real classpath awareness, including versioned symbols for third-party jars and the JDK.
 - **One index for the whole project.** clew discovers **units**, meaning build roots such as a [`pom.xml`](https://maven.apache.org/pom.html), a [`build.gradle`](https://docs.gradle.org/current/userguide/build_file_basics.html) or a [`package.json`](https://docs.npmjs.com/cli/v11/configuring-npm/package-json), and merges whatever it finds into one index. Fifty submodules produce one index and one server process, not fifty.
 - **Navigate *between* submodules.** Separate language servers each know only their own repo; a merged [SCIP](https://scip-code.org) index resolves across them, because SCIP symbols are globally-scoped strings.
-- **Language-agnostic by construction.** Anything with a [SCIP indexer](https://scip-code.org) lands in the same index with the same query path. Adding a language means adding an *indexer*, never touching the editor side.
+- **Language-agnostic by construction.** Every indexer's output lands in the same index behind the same query path, so adding a language means teaching clew to *drive* one more [SCIP indexer](https://scip-code.org), never touching the editor side. Java/Kotlin and TypeScript/JavaScript ship today.
 - **Native Neovim integration.** `clew` is an ordinary [LSP](https://microsoft.github.io/language-server-protocol/) server over stdio, driven by [Neovim's built-in LSP client](https://neovim.io/doc/user/lsp.html), so [`gd`, `gr`](https://neovim.io/doc/user/lsp.html#lsp-defaults), [`<C-]>`](https://neovim.io/doc/user/tagsrch.html#CTRL-%5D), [Telescope](https://github.com/nvim-telescope/telescope.nvim), [fzf-lua](https://github.com/ibhagwan/fzf-lua) and [aerial.nvim](https://github.com/stevearc/aerial.nvim) all work with no extra glue.
 - **No build modification required.** Your `pom.xml` is never touched. [Maven](https://maven.apache.org) is invoked only for dependency *resolution*, never for a build.
 

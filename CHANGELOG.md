@@ -7,8 +7,21 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ## 2026-07-25
 
+### Added
+
+- `doc/README.md` cites four more pieces of prior art: clangd's remote index
+  (the production precedent for the whole architecture, and the reference
+  design for staleness), `scip-io` (the closest existing thing to clew's
+  indexing half), GNU GLOBAL, and LSIF with `vscode-lsif-extension`.
+
 ### Changed
 
+- Staleness is described honestly in `doc/README.md`: "nearly free" is
+  qualified with the drift that follows editing, the clangd hybrid clew is
+  aimed at, and the fact that `staleness_check` today only reports index age.
+- `README.md` no longer claims support for "any language that has a SCIP
+  indexer". The architecture is still language-agnostic; the wording now says
+  which indexers are actually wired up, matching the dependency table.
 - `README.md` restructured: the logo leads the header, the nav bar sits directly
   under the title, and a new "What is clew.nvim?" section answers that question
   in one paragraph.

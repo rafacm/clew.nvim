@@ -54,11 +54,11 @@ func (mavenProducer) Detect(dir string) (string, bool) {
 //
 // Asserted by TestAcceptance_SingleRepository_Maven/SymbolsCarryCoordinates.
 //
-// CAVEAT, and it is a live bug: the aggregator recovers the coordinate by
+// The same degradation has a second cause, and it is why u.Dir must already be
+// realpath'd when it arrives here: the aggregator recovers the coordinate by
 // walking up from the `-d` directory to find a pom.xml, bounded by a REALPATH'D
-// sourceroot. u.Dir is whatever the user passed, so any project reached through
-// a symlink -- a symlinked workspace, anything under /tmp on macOS -- fails that
-// bound and degrades exactly as described above. See
+// sourceroot. Any spelling of u.Dir that still contains a symlink fails that
+// bound. indexer.resolveRoot is what keeps that from happening; see
 // TestAcceptance_SingleRepository_MavenViaSymlink.
 func (mavenProducer) Index(ctx context.Context, r *runner, u Unit) (string, error) {
 	targetroot := filepath.Join(u.Dir, "target", "clew-targetroot")

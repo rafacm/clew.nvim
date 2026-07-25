@@ -230,8 +230,8 @@ reference in `internal/indexer/java.go` points at it.
 
 ### What the suite found immediately
 
-Two defects, neither previously known, both now asserted as current failures in
-the same style as `Monorepo_MultiModuleMaven`:
+Two defects, neither previously known, both asserted as current failures in the
+same style as `Monorepo_MultiModuleMaven`:
 
 - **A symlink in the project path degrades every Maven coordinate.** The
   aggregator recovers coordinates by walking up from the `-d` directory to a
@@ -239,14 +239,19 @@ the same style as `Monorepo_MultiModuleMaven`:
   was given. The two disagree for any project behind a symlink, and the result
   is precisely the `scip-java maven . . ` collapse this ADR was written to
   defend against — reached by a route nobody had considered.
-  `TestAcceptance_SingleRepository_MavenViaSymlink`.
+  `TestAcceptance_SingleRepository_MavenViaSymlink`. **Fixed 2026-07-25**
+  (issue #2) by resolving the root in `indexer.resolveRoot`; the test now
+  asserts that coordinates survive, and 158 of 158 petclinic symbols do.
 - **`npm install` is assumed for every TypeScript unit,** so a yarn- or
   pnpm-managed repository fails before `scip-typescript` runs.
-  `TestAcceptance_SingleRepository_TypeScript`.
+  `TestAcceptance_SingleRepository_TypeScript`. Open.
 
 The first is worth dwelling on: it validates the argument in the Context. The
-bug is invisible locally, survives every hermetic test, and was found by the
-first acceptance run on a real project.
+bug was invisible locally, survived every hermetic test, and was found by the
+first acceptance run on a real project. It is also the pattern working as
+intended end to end — asserting the broken behaviour meant the fix arrived as an
+inverted expectation rather than as a new test somebody had to remember to
+write.
 
 ### An amendment to the CI decision
 

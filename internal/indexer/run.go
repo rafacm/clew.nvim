@@ -35,7 +35,10 @@ type result struct {
 // path rewriting, metadata normalisation, external-symbol dedup -- is exercised on
 // every run rather than being a rarely-taken branch that silently rots.
 func Run(ctx context.Context, opts Options) error {
-	root, err := filepath.Abs(opts.Root)
+	// Resolved, not merely absolute: a symlink left in the root reaches every
+	// producer through Unit.Dir and silently degrades scip-java's coordinates.
+	// See resolveRoot.
+	root, err := resolveRoot(opts.Root)
 	if err != nil {
 		return err
 	}

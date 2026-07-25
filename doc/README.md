@@ -71,10 +71,16 @@ detect  = ["pyproject.toml", "setup.py"]
 command = "npx --yes @sourcegraph/scip-python index --output $CLEW_OUTPUT"
 ```
 
-Indexers whose invocation is a pipeline rather than a command -- Maven is four
-steps with the resolved classpath feeding the compiler -- stay as Go producers,
-because forcing them into a command template would make them worse. Everything
-else is configuration.
+The producers clew ships with are the same declarations, embedded in the binary,
+so `:ClewIndex` works before you have written any configuration and the shipped
+producers exercise exactly the path your own will. Declaring a `kind` that already
+exists replaces it.
+
+One producer is not a declaration. `scip-java` needs work shared across units, a
+compile step whose failure is deliberately tolerated, and a generated
+`javacopts.txt` in an exact format, so it stays in Go. Those three needs are the
+whole test for whether anything else should: schema that covered them would be a
+build DSL, and writing one is a worse project than clew.
 
 The configuration is read by the `clew` binary, not by the Neovim plugin, so
 `clew index` keeps working in CI and from other editors. The plugin is built on top

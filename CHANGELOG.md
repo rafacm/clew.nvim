@@ -10,9 +10,13 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 ### Added
 
 - `doc/adr/`, holding architectural decision records in the Nygard format, and
-  ADR 1: producer definitions are declared in clew's own TOML configuration
-  rather than in Go or in the Neovim plugin's Lua, so a new language needs no
-  clew release and `clew index` keeps working in CI and from other editors.
+  ADR 2: a producer is a TOML declaration, read by the clew binary rather than
+  by the Neovim plugin's Lua, so a new language needs no clew release and
+  `clew index` keeps working in CI and from other editors. The producers clew
+  ships with are the same declarations, embedded with `go:embed`, so there is
+  one mechanism rather than two. `scip-java` stays in Go as a documented
+  exception: it needs cross-unit state, per-step error policy and a generated
+  file, which are the three criteria for justifying any future Go producer.
   Not implemented yet; the record is the decision, not the feature.
 - "Adding a language" in `doc/README.md`, separating the half that is
   language-agnostic today (reading an index) from the half that needs knowledge

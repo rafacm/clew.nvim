@@ -41,17 +41,22 @@ rewrite.
 
 ## Decision
 
-**Producer definitions live in clew's own configuration file, read by the Go
-binary.**
+**A producer is a TOML declaration. Go producers are a documented exception, not a
+parallel mechanism.**
+
+Configuration is the only way to define a producer. The producers clew ships with
+are embedded in the binary with `go:embed` as ordinary TOML, loaded into the same
+registry as anything a user writes. "Built-in" therefore means *a default we
+ship*, not *a second code path*.
 
 - **Format: TOML**, parsed with `github.com/BurntSushi/toml`.
-- **Discovery:** `$XDG_CONFIG_HOME/clew/producers.toml`, falling back to
-  `~/.config/clew/producers.toml`. `--config PATH` overrides both.
-- **A `configProducer` implements `Producer`** and is appended to the registry at
-  startup, so discovery and dispatch are unchanged.
-- **Config producers are consulted before the built-in Go producers**, so a user
-  can override how a directory is handled rather than only add to it. Within the
-  config file, order is precedence, matching the registry's existing rule.
+- **Discovery:** embedded defaults first, then
+  `$XDG_CONFIG_HOME/clew/producers.toml`, falling back to
+  `~/.config/clew/producers.toml`. `--config PATH` overrides the user file.
+- **User declarations shadow embedded defaults by `kind`.** Redefining `typescript`
+  replaces the shipped one rather than competing with it, so overriding needs no
+  precedence rule beyond "yours wins." Within a file, order is detection
+  precedence, matching the registry's existing rule.
 - **The contract with a command** is environment variables in, a SCIP index out:
   clew passes `$CLEW_UNIT_DIR`, `$CLEW_OUTPUT` and `$CLEW_PREFIX`, and expects a
   valid index written to `$CLEW_OUTPUT`.
@@ -70,11 +75,39 @@ detect  = ["pyproject.toml", "setup.py"]
 command = "npx --yes @sourcegraph/scip-python index --output $CLEW_OUTPUT"
 ```
 
-**Multi-step pipelines stay in Go.** Maven is resolve-classpath → javac-with-plugin
-→ write `javacopts.txt` → aggregate, with data flowing between steps; that does not
-fit a command template and should not be forced into one. Configuration covers the
-single-command class, which is most of what exists. Anything more complex points
-`command` at a user script.
+### When a Go producer is justified
+
+A producer stays in Go only if it needs one of the following. If it needs none of
+them, it is a TOML declaration, and an existing Go producer that needs none should
+be moved out.
+
+1. **Cross-unit state.** Work shared across concurrently indexed units, through
+   `runner.memo`. A per-unit command cannot share anything in-process.
+2. **Per-step error policy.** A step whose failure is deliberately tolerated
+   alongside one whose failure is fatal.
+3. **Generated files.** A file the indexer requires whose exact format clew must
+   produce.
+
+**`scip-typescript` meets none of these and moves to an embedded declaration.** It
+is one command plus a conditional `npm install`, which a shell command expresses
+directly.
+
+**`scip-java` meets all three, and stays:**
+
+1. `scipJavacClasspath` resolves the compiler plugin once per run and shares it
+   across every Maven unit. Per-unit commands would each resolve it, and would race
+   on the same `classpath.txt` on first run — the bug fixed in `2a7378f`,
+   reintroduced, with `flock` as shell's answer.
+2. `javac` runs with its exit code deliberately ignored, because the SCIP plugin
+   still emits shards for whatever compiled and a partial index beats none. The
+   `aggregate` step that follows must succeed.
+3. `writeJavacOpts` emits `javacopts.txt` in an exact format — `-version`, then
+   every option and source file individually `%q`-quoted, one per line. Omitting it
+   silently degrades every symbol in the unit to an anonymous package.
+
+Extending the schema to cover those three would mean multi-step declarations with
+data flowing between steps, per-step error policy, and templated file generation.
+That is a build DSL, and building one is a worse project than clew.
 
 **Repo-local `.clew/producers.toml` is not honoured.** See below.
 
@@ -84,6 +117,12 @@ single-command class, which is most of what exists. Anything more complex points
 
 - Adding a language needs no clew release. Shipping an example per language is the
   whole delivery mechanism.
+- One mechanism rather than two. The shipped producers exercise exactly the path
+  users write against, so the declaration format cannot quietly become
+  second-class.
+- The Go producer list shrinks over time instead of growing. After this it is
+  `scip-java` alone, with `scip-gradle` joining it when written, and the three
+  criteria above decide anything new.
 - `clew index` and `clew units` stay usable standalone, so CI indexing keeps
   working and clew stays editor-agnostic.
 - The Neovim plugin stays thin: it passes `--config` or nothing, and serializes
@@ -95,8 +134,9 @@ single-command class, which is most of what exists. Anything more complex points
 
 - One new dependency. `BurntSushi/toml` declares zero requirements, which matters
   because the dependency graph was just reduced to a single indirect requirement.
-- Two ways to add a language. The documentation has to say plainly which to reach
-  for: configuration first, Go only when the pipeline has steps.
+- Shipped producers become shell strings, so they are platform-specific in a way Go
+  code was not. Windows support for an embedded default is now a property of the
+  declaration rather than of the binary.
 - TOML is not the Go ecosystem norm — YAML is. It was chosen anyway because every
   producer entry holds a shell command, and YAML is whitespace-significant and
   type-coercing, which makes command strings its worst case. JSON was rejected for

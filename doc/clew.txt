@@ -89,6 +89,7 @@ See |clew-config| for options. No configuration is required.
       auto_index = "never",      -- "never" | "save" | "manual"
       staleness_check = true,
       cmd = nil,                 -- override the server command entirely
+      server_name = "clew",      -- name registered with vim.lsp.config
     })
 <
 ==============================================================================

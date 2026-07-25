@@ -18,6 +18,8 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
   exception: it needs cross-unit state, per-step error policy and a generated
   file, which are the three criteria for justifying any future Go producer.
   Not implemented yet; the record is the decision, not the feature.
+- `make docs`, regenerating `doc/tags` so `:help clew` works from a source
+  checkout and a malformed `*tag*` fails in the Makefile rather than for a user.
 - Supported platforms stated in `README.md` and `doc/clew.txt`: macOS, Linux,
   and Windows via WSL. Native Windows is not supported, because indexers are
   driven as shell commands assuming a POSIX shell.
@@ -60,6 +62,15 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
   `github.com/sourcegraph/scip v0.6.0` predated the typed occurrence ranges
   `internal/index/query.go` reads: it did not compile. Repinned to
   `github.com/scip-code/scip/bindings/go/scip v0.9.0`.
+- `README.md` documented `:ClewUnits` and `:ClewLog` as though they existed.
+  `lua/clew/commands.lua` registers three commands: `ClewIndex`, `ClewStatus`
+  and `ClewRestart`. Both are now marked 🚧 with the `clew units` shell
+  equivalent noted, and `:ClewStatus` describes what it actually prints rather
+  than discovered units and symbol counts it has never reported.
+- Configuration defaults in `README.md` had drifted from `lua/clew/config.lua`:
+  `javascriptreact` was missing from `filetypes`, `node_modules/**` from
+  `root.exclude`, and `root.markers` listed `.clew/index.scip` ahead of
+  `.clew/config.toml`.
 - `go.sum` is committed, so the repository builds from a clean checkout.
 - Data race indexing more than one Maven unit. Units index concurrently and
   share one `runner`, whose `cachedJavacCP` and `cachedCLICP` fields were read

@@ -124,16 +124,17 @@ require("clew").setup({
   index_path = ".clew/index.scip",
 
   -- Filetypes clew attaches to.
-  filetypes = { "java", "kotlin", "typescript", "typescriptreact", "javascript" },
+  filetypes = { "java", "kotlin", "typescript", "typescriptreact", "javascript",
+                "javascriptreact" },
 
   -- Root detection. clew always prefers the OUTERMOST match so a superproject
   -- yields ONE server, not one per submodule.
   root = {
-    markers = { ".clew/index.scip", ".clew/config.toml", ".gitmodules", ".git" },
+    markers = { ".clew/config.toml", ".clew/index.scip", ".gitmodules", ".git" },
     -- Units to index. Empty = auto-discover build roots (pom.xml, build.gradle,
     -- package.json + angular.json, ...) beneath the project root.
     include = {},
-    exclude = { "vendor/**", "third_party/**" },
+    exclude = { "vendor/**", "third_party/**", "node_modules/**" },
   },
 
   -- Rebuild the index automatically. "never" | "save" | "manual"
@@ -164,11 +165,13 @@ Because the index is a plain file, it can equally be produced in CI and then com
 | --- | --- |
 | `:ClewIndex` | Build or rebuild the index for the whole project |
 | `:ClewIndex {unit}` | Rebuild a single unit, for example one submodule |
-| `:ClewStatus` | Show project root, discovered units, index age, symbol/document counts |
-| `:ClewUnits` | List discovered indexable units and the indexer chosen for each |
-| `:ClewRestart` | Restart the language server and reload the index |
-| `:ClewLog` | Open the clew server log |
-| `:checkhealth clew` | Verify binary, toolchains, root detection and index validity |
+| `:ClewStatus` | Show project root, the marker that matched, binary location, index size and age, and attached client count |
+| `:ClewRestart` | Restart the language server; it reattaches on the next matching buffer |
+| `:checkhealth clew` | Verify Neovim version, binary, toolchains, root detection and index presence |
+| `:ClewUnits` | List discovered indexable units and the indexer chosen for each 🚧 |
+| `:ClewLog` | Open the clew server log 🚧 |
+
+Until `:ClewUnits` exists, `clew units --root .` from a shell does the same job.
 
 ## Integration with Neovim
 

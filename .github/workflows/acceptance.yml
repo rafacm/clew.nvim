@@ -1,10 +1,19 @@
 # Tier 3: real projects, downloaded at pinned commits, indexed for real.
 #
-# On a schedule rather than per-change, because it needs a JDK, Maven, Node and
-# minutes. The trade is stated in doc/adr/0001-testing-strategy.md: a regression
-# in the Maven pipeline may be found a day late rather than on the commit that
-# caused it, and that is preferred to a per-change suite slow enough that people
-# stop running it.
+# Primarily on a schedule, because it needs a JDK, Maven, Node and minutes, and
+# because it depends on the network -- GitHub, Maven Central, the npm registry --
+# so a failure is not always about the commit under test. The trade is stated in
+# doc/adr/0001-testing-strategy.md.
+#
+# The schedule is not merely a slower per-change run. It is the only thing that
+# catches UPSTREAM drift: ScipTypeScriptPackage is pinned to @latest, so the
+# producer moves underneath clew with no commit on clew's side, and a pinned
+# project can be renamed or made private. No pull-request trigger can see that.
+#
+# The pull_request trigger below is deliberately narrow: it fires only when the
+# suite or its harness is itself edited, so a change to tier 3 is verified by
+# tier 3 rather than merged on the strength of a local run. It is NOT a
+# per-change indexing check; see the note in the pull request that added it.
 
 name: acceptance
 
@@ -13,9 +22,15 @@ on:
     # 04:00 UTC daily, comfortably outside anyone's working hours.
     - cron: "0 4 * * *"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/acceptance.yml"
+      - "internal/acceptance/**"
 
 concurrency:
-  group: acceptance
+  # Keyed by ref so a pull-request run and the nightly do not serialise behind
+  # one another; scheduled runs all share the `refs/heads/main` group.
+  group: acceptance-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:

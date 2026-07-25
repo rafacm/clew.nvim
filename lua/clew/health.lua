@@ -48,7 +48,11 @@ function M.check()
   end
   tool("java", "required to index Java/Kotlin units (JDK 17+)")
   tool("mvn", "required for Maven dependency resolution")
-  tool("node", "required to index TypeScript/JavaScript units")
+  -- Which package manager a unit needs is decided by its lockfile, and that
+  -- detection lives in the binary; duplicating its precedence here would only
+  -- give it somewhere to drift.
+  tool("node", "required to index TypeScript/JavaScript units, along with the "
+    .. "project's own package manager (npm, pnpm, yarn or bun)")
 
   start("clew: project")
   local name = vim.api.nvim_buf_get_name(0)

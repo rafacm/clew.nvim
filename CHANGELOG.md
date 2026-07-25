@@ -112,6 +112,30 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ### Fixed
 
+- **A TypeScript unit is installed with its own package manager** (issue #3).
+  `npm install` ran unconditionally, so a yarn-, pnpm- or bun-managed repository
+  was resolved by a manager it does not use — and where npm's resolver refuses
+  the project's graph outright, as it does for immer's, the unit produced no
+  index at all rather than a degraded one. The lockfile now decides:
+  `pnpm-lock.yaml`, `yarn.lock` (classic or berry, distinguished by the file's
+  own banner), `bun.lock`/`bun.lockb`, `package-lock.json`, and npm's last
+  because it is the one most often left behind by an accidental `npm install`.
+  A project whose manager is missing from `$PATH` now fails naming both the
+  lockfile and the binary, rather than reaching for npm and indexing against a
+  dependency tree nobody uses. Every install is frozen, because "no build file
+  is ever modified" covers a lockfile: the sole exception is `npm ci`, which
+  refuses a lockfile that has drifted from `package.json`, and there
+  `installDependencies` falls back to `npm install` and logs that it may rewrite
+  it. `TestAcceptance_SingleRepository_TypeScript` now indexes immer through
+  yarn and asserts `yarn.lock` is byte-identical afterwards; `planInstall` is
+  covered hermetically.
+- The Angular fixture had been indexed with the wrong package manager all along.
+  `angular-realworld` ships a `bun.lock` and no `package-lock.json`, so
+  `TestAcceptance_SingleRepository_Angular` was green while installing a tree
+  npm resolved from scratch — the exact failure acceptance testing exists to
+  catch, passing because the assertions never looked at how dependencies got
+  there. It now installs with `bun`, and `acceptance.yml` installs `yarn` and
+  `bun` alongside Node.
 - **A symlink in the project path no longer destroys every Maven coordinate**
   (issue #2). `scip-java` bounds its search for the unit's `pom.xml` by a
   *realpath'd* sourceroot while clew passed the path the user gave, so for any

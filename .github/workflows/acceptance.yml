@@ -89,6 +89,15 @@ jobs:
           # suite is what verifies the choice.
           node-version: "22"
 
+      # clew installs a unit with the package manager the unit declares, so the
+      # suite needs the ones its fixtures declare: immer ships a yarn.lock,
+      # angular-realworld a bun.lock. Installed explicitly rather than trusted to
+      # the runner image, and via npm rather than a third-party action, which
+      # keeps the action list to actions/*. Both tests requireTools these, and
+      # CLEW_TEST_REQUIRE_TOOLS makes a failure here loud instead of a skip.
+      - name: install the package managers the fixtures declare
+        run: npm install --global yarn bun
+
       # Fixtures are keyed by commit SHA and never change under a given key, so
       # the cache is safe to restore and only grows when a pin moves.
       - name: cache downloaded fixtures

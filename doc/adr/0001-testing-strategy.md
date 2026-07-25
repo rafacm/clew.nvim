@@ -110,8 +110,8 @@ alone: `TestDiscover_Superproject`, `TestAcceptance_Monorepo_MultiModuleMaven`.
 | --- | --- | --- |
 | `SingleRepository_Maven` | `spring-projects/spring-petclinic` | The pipeline's original validation target (`java.go:18`). Carries both `pom.xml` and `build.gradle`, so it also covers producer precedence |
 | `SingleRepository_MavenLarge` | `apache/commons-lang` | Single module, real `src/main/java`. The indexing-time measurement |
-| `SingleRepository_TypeScript` | `immerjs/immer` | `package.json` + `tsconfig.json`, no workspace file |
-| `SingleRepository_Angular` | `gothinkster/angular-realworld-example-app` | The `angular.json` branch, and the known template gap |
+| `SingleRepository_TypeScript` | `immerjs/immer` | `package.json` + `tsconfig.json`, no workspace file. **yarn-managed**, and npm cannot install it at all, so it is also the regression test for package-manager detection (issue #3) |
+| `SingleRepository_Angular` | `gothinkster/angular-realworld-example-app` | The `angular.json` branch, and the known template gap. **bun-managed** |
 | `SingleRepository_Python` | `pallets/flask` | Once a Python producer exists. `src/` layout, and every dependency is pure Python, so nothing builds from source on either platform |
 | `Monorepo_PnpmWorkspace` | `colinhacks/zod` | Root `package.json` + `tsconfig.json` + `pnpm-workspace.yaml`. clew classifies the root as one unit and never descends into `packages/`; the test pins that behaviour so a change to it is deliberate |
 | `Monorepo_MultiModuleMaven` | `apache/commons-math` | Nine `<module>` entries, no root `src/main/java`. **Currently fails** -- see below |
@@ -244,7 +244,13 @@ same style as `Monorepo_MultiModuleMaven`:
   asserts that coordinates survive, and 158 of 158 petclinic symbols do.
 - **`npm install` is assumed for every TypeScript unit,** so a yarn- or
   pnpm-managed repository fails before `scip-typescript` runs.
-  `TestAcceptance_SingleRepository_TypeScript`. Open.
+  `TestAcceptance_SingleRepository_TypeScript`. **Fixed 2026-07-25** (issue #3)
+  by installing with the manager the unit's lockfile names; the test now
+  indexes immer through yarn and asserts the lockfile is untouched. The fix
+  also revealed that `angular-realworld` is bun-managed and had been installed
+  with npm all along — passing, but against a dependency tree the project does
+  not use, which is the failure mode acceptance testing is meant to catch and
+  did not.
 
 The first is worth dwelling on: it validates the argument in the Context. The
 bug was invisible locally, survived every hermetic test, and was found by the

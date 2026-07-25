@@ -41,7 +41,10 @@ indexers are driven as shell commands assuming a POSIX shell.
 Per language, only for what you actually index:
 
   - Java/Kotlin ....... JDK 17+, Maven or Gradle
-  - TypeScript/JS ..... Node.js 18+
+  - TypeScript/JS ..... Node.js 18+, plus the project's own package manager
+                        (pnpm, yarn or bun) when its lockfile names one;
+                        clew installs with that one and never falls back
+                        to npm
 
 ==============================================================================
 3. SETUP                                                          *clew-setup*

@@ -58,8 +58,19 @@ These were established empirically, most of them the expensive way. Each one fai
 - **Units index concurrently and share one `runner`.** Anything cached across units
   goes through `runner.memo`, never a struct field. Three races were fixed this way
   and the pattern exists to stop a fourth.
-- **No build file is ever modified.** Maven runs only `dependency:build-classpath`;
-  `pom.xml` is byte-identical before and after indexing.
+- **A unit is installed with its own package manager, never npm by default.** The
+  lockfile decides — `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`, `package-lock.json`
+  — and a project whose manager is missing from `$PATH` fails rather than falling
+  back. Reaching for npm regardless either fails outright (immer's peer graph) or,
+  worse, succeeds against a dependency tree the project has never used;
+  angular-realworld is bun-managed and was indexed by npm for months without
+  anything noticing. See `internal/indexer/typescript.go:planInstall`.
+- **No build file is ever modified**, and a lockfile is a build file. Maven runs
+  only `dependency:build-classpath`, `pom.xml` is byte-identical before and after
+  indexing, and every JS install is frozen. The single exception is deliberate:
+  `npm ci` refuses a `package-lock.json` that has drifted from `package.json`, so
+  `installDependencies` falls back to `npm install` — which may rewrite it — and
+  logs that it is doing so.
 - **Angular templates are not indexed.** `scip-typescript` reads `.ts` and ignores
   `.html`. Component members are symbolized, but nothing references them from a
   template.
@@ -153,6 +164,13 @@ catches *upstream* drift: `@latest` moving underneath clew, or a pinned fixture
 being renamed or made private. No pull-request trigger can see that, so the
 schedule stays even though pull requests now run the same suite.
 
+**The suite needs whatever package manager its fixtures declare.** clew installs a
+TypeScript unit with the manager named by its lockfile, so immer needs `yarn` and
+angular-realworld needs `bun`; `acceptance.yml` installs both with
+`npm install --global`. A fixture that switches lockfiles upstream changes which
+binaries tier 3 requires, and both tests fail with that message rather than a
+resolver error.
+
 **`CLEW_TEST_REQUIRE_TOOLS` turns a missing toolchain into a failure,** and
 `acceptance.yml` sets it. Locally, `requireTools` skips — a laptop without a JDK
 is not a clew regression. In CI the same skip would mean a broken setup step
@@ -168,11 +186,13 @@ WSL is claimed in `README.md` and is not verified by CI.
 
 ## Known gaps
 
-- **`npm install` is assumed for every TypeScript unit.** `typeScriptProducer`
-  runs it unconditionally, so a yarn- or pnpm-developed repository fails before
-  `scip-typescript` is ever reached — immer's dev-dependency graph is one npm's
-  resolver refuses outright. Detecting the lockfile is the fix.
-  `TestAcceptance_SingleRepository_TypeScript` asserts the current failure.
+- **The lockfile is the only package-manager signal clew reads.** `packageManager`
+  in `package.json` — corepack's authoritative answer — is not consulted, so a
+  repository carrying two lockfiles is resolved by the precedence in `planInstall`
+  rather than by what it declares. Every fixture agrees with its lockfile so far.
+- **Yarn PnP is not handled.** `nodeLinker: pnp` installs no `node_modules`, so
+  clew reinstalls on every run and then hands `scip-typescript` a tree it cannot
+  resolve. Untested: there is no PnP fixture.
 - **Stale-buffer position mapping.** The index reports positions as of the last
   index, so `gd` drifts after edits. `staleness_check` reports index age; it does
   not fix positions. This is the product risk, not a rough edge.

@@ -58,7 +58,7 @@ Per language, only for the languages you actually index:
 | Language | Needs | Provided by |
 | --- | --- | --- |
 | Java / Kotlin | JDK 17+, Maven or Gradle | [`scip-java`](https://github.com/scip-code/scip-java) |
-| TypeScript / JavaScript | Node.js 18+ | [`scip-typescript`](https://github.com/sourcegraph/scip-typescript) |
+| TypeScript / JavaScript | Node.js 18+, plus the project's own package manager — `pnpm`, `yarn` or `bun` — when its lockfile names one | [`scip-typescript`](https://github.com/sourcegraph/scip-typescript) |
 
 Other languages work as soon as clew learns to drive their indexer; see [the SCIP indexer list](https://scip-code.org) for what exists.
 

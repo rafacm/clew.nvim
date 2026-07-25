@@ -3,6 +3,7 @@
 package acceptance
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -174,17 +175,17 @@ func TestAcceptance_SingleRepository_MavenLarge(t *testing.T) {
 
 // immer: package.json + tsconfig.json, no workspace file.
 //
-// Discovery is asserted. INDEXING CURRENTLY FAILS, and not in scip-typescript:
-// typeScriptProducer.Index runs `npm install` unconditionally, while immer ships
-// a yarn.lock and a dev-dependency graph npm's resolver rejects outright
-// (@vitest/coverage-v8 pins a peer vitest npm will not reconcile). Every
-// yarn- or pnpm-developed repository is exposed to the same thing.
+// It is here because it is YARN-managed. `npm install` on this tree fails
+// outright -- @vitest/coverage-v8 pins a peer vitest npm's resolver will not
+// reconcile -- so before package-manager detection existed the unit produced no
+// index at all. That is issue #3, and this is its regression test: the claim is
+// not merely that immer indexes, but that it indexes through the manager the
+// project actually declares.
 //
-// Asserted rather than skipped, following Monorepo_MultiModuleMaven. Note that
-// the TypeScript pipeline itself is proven by SingleRepository_Angular, which
-// indexes end to end -- what is missing here is package-manager detection.
+// The TypeScript pipeline itself is proven by SingleRepository_Angular too;
+// what is exercised here and nowhere else is the yarn branch of planInstall.
 func TestAcceptance_SingleRepository_TypeScript(t *testing.T) {
-	requireTools(t, "node", "npm", "npx")
+	requireTools(t, "node", "npm", "npx", "yarn")
 
 	root := singleRepository(t, immer)
 
@@ -192,34 +193,65 @@ func TestAcceptance_SingleRepository_TypeScript(t *testing.T) {
 		t.Fatalf("units = %v, want the root classified as a single typescript unit", got)
 	}
 
-	// The fixture's shape is the reason it is here, and the reason it fails.
-	if _, err := os.Stat(filepath.Join(root, "yarn.lock")); err != nil {
+	// The fixture's premise. A package-lock.json appearing upstream would make
+	// this pass through npm and quietly stop testing anything.
+	lock := filepath.Join(root, "yarn.lock")
+	before, err := os.ReadFile(lock)
+	if err != nil {
 		t.Fatalf("immer no longer ships a yarn.lock; this fixture's premise has changed: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(root, "package-lock.json")); err == nil {
+		t.Fatal("immer now ships a package-lock.json as well; this fixture no longer proves yarn detection")
+	}
 
-	err := indexer.Run(context.Background(), indexer.Options{Root: root, Log: testLogger{t}})
-	if err == nil {
-		t.Fatal("a yarn-managed project now indexes successfully -- " +
-			"remove this expectation, assert on the resulting index, and update " +
-			"the known-gaps list in AGENTS.md")
-	}
-	if !strings.Contains(err.Error(), "every unit failed") {
-		t.Errorf("indexing failed with %v; expected the npm install failure", err)
-	}
-	t.Logf("known gap reproduced: %v", err)
+	store, elapsed := buildIndex(t, root)
+	t.Logf("indexed immer in %.1fs", elapsed.Seconds())
+
+	// A definition in immer's OWN source: the claim is that the yarn-installed
+	// tree was indexed, not merely that scip-typescript ran. No identifier is
+	// pinned -- immer's tsconfig names four entry files and reorganises them
+	// between releases, so `Immer#` itself is not in the index at this pin.
+	sym := findSymbol(t, store, "a definition under immer's src/", func(s string) bool {
+		defs := store.Definitions("", s)
+		return len(defs) > 0 && strings.HasPrefix(defs[0].Path, "src/")
+	})
+	assertResolves(t, store, sym, "")
+
+	// `yarn install --frozen-lockfile`, not `yarn install`. Every producer is
+	// bound by "no build file is ever modified", and a lockfile is a build file:
+	// clew must not silently re-resolve a tree the project has pinned.
+	t.Run("TheLockfileIsNotRewritten", func(t *testing.T) {
+		after, err := os.ReadFile(lock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(before, after) {
+			t.Errorf("yarn.lock changed during indexing (%d bytes before, %d after); "+
+				"the install is not frozen", len(before), len(after))
+		}
+	})
 }
 
 // ----------------------------------------------------- SingleRepository_Angular
 
 // angular-realworld exercises the angular.json detection branch, and pins the
 // known template gap.
+//
+// It is also BUN-managed -- bun.lock, no package-lock.json -- which went
+// unnoticed while every unit was installed with npm regardless. It passed then
+// only because npm's fresh resolution of this particular tree happens to work;
+// the bun branch of planInstall is what runs now.
 func TestAcceptance_SingleRepository_Angular(t *testing.T) {
-	requireTools(t, "node", "npm", "npx")
+	requireTools(t, "node", "npm", "npx", "bun")
 
 	root := singleRepository(t, angularReal)
 
 	if got := units(t, root); len(got) != 1 || got[0] != ":typescript" {
 		t.Fatalf("units = %v, want the root classified as a single typescript unit", got)
+	}
+	if _, err := os.Stat(filepath.Join(root, "bun.lock")); err != nil {
+		t.Fatalf("angular-realworld no longer ships a bun.lock, so this fixture no longer "+
+			"covers the bun branch; drop bun from requireTools above if that is intended: %v", err)
 	}
 
 	store, elapsed := buildIndex(t, root)
@@ -408,8 +440,12 @@ func findCrossUnitSymbol(t *testing.T, store *index.Store, defPrefix, refPrefix 
 
 // The polyglot superproject, mirroring the layout clew was built for: a Java
 // service and an Angular frontend under one root, indexed into one index.
+//
+// bun is required for the same reason as in SingleRepository_Angular: the web
+// unit is the same bun-managed fixture, and clew installs it with the manager it
+// declares.
 func TestAcceptance_Superproject_JavaAndAngular(t *testing.T) {
-	requireTools(t, "mvn", "javac", "java", "node", "npm", "npx")
+	requireTools(t, "mvn", "javac", "java", "node", "npm", "npx", "bun")
 
 	root := superproject(t, map[string]Project{
 		"java/commons-lang": commonsLang,

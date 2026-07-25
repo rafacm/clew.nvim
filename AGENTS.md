@@ -143,6 +143,11 @@ catches *upstream* drift: `@latest` moving underneath clew, or a pinned fixture
 being renamed or made private. No pull-request trigger can see that, so the
 schedule stays even though pull requests now run the same suite.
 
+**`CLEW_TEST_REQUIRE_TOOLS` turns a missing toolchain into a failure,** and
+`acceptance.yml` sets it. Locally, `requireTools` skips — a laptop without a JDK
+is not a clew regression. In CI the same skip would mean a broken setup step
+reports a green tick having verified nothing, so there it must be fatal.
+
 Also note `acceptance.yml` deliberately does **not** use `setup-java`'s
 `cache: maven`. That option keys on `hashFiles('**/pom.xml')` and fails the job
 outright when nothing matches, and clew has no `pom.xml` of its own — every pom

@@ -319,12 +319,26 @@ func copyTree(src, dst string) error {
 // requireTools skips the test unless every named executable is on $PATH.
 //
 // A skip, not a failure: a missing JDK on a laptop is not a clew regression.
-// CI's scheduled tier 3 job installs the toolchains and a skip there means the
-// job is misconfigured, which the log makes obvious.
+//
+// In CI that reasoning inverts. A tier 3 job whose toolchain setup silently
+// broke would skip every test and report a green tick having verified nothing,
+// which is strictly worse than a red one -- the whole suite would evaporate and
+// the only trace would be a line in a log nobody reads. Setting
+// CLEW_TEST_REQUIRE_TOOLS turns every such skip into a failure, and
+// acceptance.yml sets it.
+//
+// TestAcceptance_SingleRepository_Python is a plain t.Skip and is unaffected:
+// it is waiting on a producer, not on a toolchain.
 func requireTools(t *testing.T, names ...string) {
 	t.Helper()
+	strict := os.Getenv("CLEW_TEST_REQUIRE_TOOLS") != ""
 	for _, n := range names {
 		if _, err := exec.LookPath(n); err != nil {
+			if strict {
+				t.Fatalf("%s is not on $PATH, and CLEW_TEST_REQUIRE_TOOLS is set: "+
+					"tier 3 needs it, so this is a broken CI configuration rather than "+
+					"a test to skip", n)
+			}
 			t.Skipf("%s is not on $PATH; tier 3 needs it", n)
 		}
 	}

@@ -62,6 +62,9 @@ jobs:
       # Set explicitly so the cache step and the suite agree on one path across
       # both runners; cacheRoot reads XDG_CACHE_HOME before os.UserCacheDir.
       XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+      # Turn "toolchain missing, skipping" into a failure. Without this a broken
+      # setup step yields a green job that verified nothing at all.
+      CLEW_TEST_REQUIRE_TOOLS: "1"
     steps:
       - uses: actions/checkout@v4
 

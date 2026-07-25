@@ -10,10 +10,19 @@
 # producer moves underneath clew with no commit on clew's side, and a pinned
 # project can be renamed or made private. No pull-request trigger can see that.
 #
-# The pull_request trigger below is deliberately narrow: it fires only when the
-# suite or its harness is itself edited, so a change to tier 3 is verified by
-# tier 3 rather than merged on the strength of a local run. It is NOT a
-# per-change indexing check; see the note in the pull request that added it.
+# The pull_request trigger below covers any change that could plausibly alter
+# indexing, so a regression is found on the commit that caused it rather than a
+# day later. Docs- and plugin-only changes are skipped.
+#
+# THIS JOB MUST NOT BECOME A REQUIRED CHECK. It depends on GitHub, Maven Central
+# and the npm registry, and ScipTypeScriptPackage is pinned to @latest, so it can
+# go red through no fault of the pull request. A required check that fails for
+# reasons the author cannot fix teaches people to merge past red CI, at which
+# point it protects nothing. Advisory is the whole design.
+#
+# THE PATHS LIST MIRRORS THE PROJECT LAYOUT AND DOES NOT MAINTAIN ITSELF. A new
+# top-level Go package that is not listed here silently drops out of tier 3
+# coverage -- the job does not fail, it simply never runs. See AGENTS.md.
 
 name: acceptance
 
@@ -24,8 +33,12 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - "internal/**" # every Go package that touches indexing, merge or query
+      - "cmd/**"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile" # owns the test-acceptance target
       - ".github/workflows/acceptance.yml"
-      - "internal/acceptance/**"
 
 concurrency:
   # Keyed by ref so a pull-request run and the nightly do not serialise behind
@@ -57,11 +70,15 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # NOTE: deliberately no `cache: maven`. That option keys its cache on
+      # hashFiles('**/pom.xml') and fails the job outright when nothing matches
+      # -- and clew has no pom.xml of its own. Every pom this suite touches
+      # belongs to a fixture and does not exist until the download step runs.
+      # ~/.m2 is cached explicitly below instead.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
-          cache: maven
 
       - uses: actions/setup-node@v4
         with:
@@ -75,6 +92,17 @@ jobs:
           path: ${{ github.workspace }}/.cache/clew-test
           key: clew-fixtures-${{ hashFiles('internal/acceptance/fixtures.go') }}
           restore-keys: clew-fixtures-
+
+      # Resolving spring-petclinic, commons-lang and commons-text -- plus the
+      # scip-javac and scip-java classpaths -- dominates a cold run. Keyed on
+      # the fixture pins and on ScipVersion, which together decide everything
+      # that gets resolved.
+      - name: cache maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: clew-m2-${{ runner.os }}-${{ hashFiles('internal/acceptance/fixtures.go', 'internal/indexer/java.go') }}
+          restore-keys: clew-m2-${{ runner.os }}-
 
       - name: acceptance
         run: make test-acceptance

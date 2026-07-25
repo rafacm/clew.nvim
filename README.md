@@ -41,11 +41,8 @@ clew does not distinguish between project layouts. It discovers **units**, meani
 | Shape | What clew does |
 | --- | --- |
 | **Single repository** | One unit, one index. No configuration needed. |
-| **Git superproject** | One unit per submodule, merged into one index. Navigation crosses submodule boundaries. |
+| **[Git superproject](https://git-scm.com/docs/gitsubmodules)** | One unit per submodule, merged into one index. Navigation crosses submodule boundaries. |
 | **Monorepo** | One unit per build root, merged the same way. Submodules are not required. |
-
-> [!NOTE]
-> **On terminology:** *superproject* is [git's own term](https://git-scm.com/docs/gitsubmodules) for a repository that contains submodules, so this README prefers it over the informal "umbrella project". The distinction matters less than it sounds: to clew, a superproject and a monorepo are both just several units under one root.
 
 ## Why a precomputed index?
 

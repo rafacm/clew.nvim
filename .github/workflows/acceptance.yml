@@ -118,5 +118,26 @@ jobs:
           key: clew-m2-${{ runner.os }}-${{ hashFiles('internal/acceptance/fixtures.go', 'internal/indexer/java.go') }}
           restore-keys: clew-m2-${{ runner.os }}-
 
+      # Nothing cached on behalf of npm, yarn or bun, so every run re-downloaded
+      # immer's dev-dependency graph from the registry -- 43s of a 115s suite,
+      # and the slowest single test by a wide margin. Keyed on the fixture pins,
+      # which decide which lockfiles get installed, and on the OS, because these
+      # caches hold platform binaries. `npx @sourcegraph/scip-typescript@latest`
+      # lands in ~/.npm/_npx and benefits too.
+      #
+      # The Yarn paths are one per platform: yarn classic caches under
+      # ~/.cache/yarn on Linux and ~/Library/Caches/Yarn on macOS. The unused one
+      # is simply absent, which actions/cache warns about and tolerates.
+      - name: cache javascript package manager downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/yarn
+            ~/Library/Caches/Yarn
+            ~/.bun/install/cache
+          key: clew-js-${{ runner.os }}-${{ hashFiles('internal/acceptance/fixtures.go') }}
+          restore-keys: clew-js-${{ runner.os }}-
+
       - name: acceptance
         run: make test-acceptance

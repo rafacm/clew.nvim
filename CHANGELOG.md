@@ -84,8 +84,14 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
     Recorded as issue #2 and **fixed the same day** — see *Fixed*, below.
   - **`npm install` is assumed for every TypeScript unit,** so a yarn- or
     pnpm-managed repository fails before `scip-typescript` runs at all.
-    `TestAcceptance_SingleRepository_TypeScript` reproduces it on immer. Still
-    open, and listed under known gaps in `AGENTS.md`.
+    Recorded as issue #3 and **fixed the same day** — see *Fixed*, below.
+- Tier 3 runs in parallel, and caches the downloads it had been repeating. Seven
+  of ten tests now call `t.Parallel()`; the three that do not are barriers, since
+  Go runs sequential tests first and no two concurrent tests may download the
+  same artifact — a Maven local repository is not safe for concurrent writes of
+  one artifact across processes. `acceptance.yml` also caches the npm, yarn and
+  bun download caches, which nothing had covered: immer's yarn install was 43
+  seconds of a 115-second suite, re-fetched from the registry on every run.
 - Staleness is described honestly in `doc/README.md`: "nearly free" is
   qualified with the drift that follows editing, the clangd hybrid clew is
   aimed at, and the fact that `staleness_check` today only reports index age.

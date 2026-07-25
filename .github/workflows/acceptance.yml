@@ -66,9 +66,9 @@ jobs:
       # setup step yields a green job that verified nothing at all.
       CLEW_TEST_REQUIRE_TOOLS: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
@@ -78,19 +78,21 @@ jobs:
       # -- and clew has no pom.xml of its own. Every pom this suite touches
       # belongs to a fixture and does not exist until the download step runs.
       # ~/.m2 is cached explicitly below instead.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          # Current LTS. The Angular fixture is the constraint here, and the
+          # suite is what verifies the choice.
+          node-version: "22"
 
       # Fixtures are keyed by commit SHA and never change under a given key, so
       # the cache is safe to restore and only grows when a pin moves.
       - name: cache downloaded fixtures
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/.cache/clew-test
           key: clew-fixtures-${{ hashFiles('internal/acceptance/fixtures.go') }}
@@ -101,7 +103,7 @@ jobs:
       # the fixture pins and on ScipVersion, which together decide everything
       # that gets resolved.
       - name: cache maven repository
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.m2/repository
           key: clew-m2-${{ runner.os }}-${{ hashFiles('internal/acceptance/fixtures.go', 'internal/indexer/java.go') }}

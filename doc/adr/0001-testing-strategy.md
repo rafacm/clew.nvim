@@ -1,6 +1,6 @@
 # 1. Testing strategy: three tiers, hermetic by default
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-25
 
 ## Context
@@ -112,8 +112,7 @@ alone: `TestDiscover_Superproject`, `TestAcceptance_Monorepo_MultiModuleMaven`.
 | `SingleRepository_MavenLarge` | `apache/commons-lang` | Single module, real `src/main/java`. The indexing-time measurement |
 | `SingleRepository_TypeScript` | `immerjs/immer` | `package.json` + `tsconfig.json`, no workspace file |
 | `SingleRepository_Angular` | `gothinkster/angular-realworld-example-app` | The `angular.json` branch, and the known template gap |
-| `SingleRepository_Python` | `pallets/flask` | Once a Python producer exists |
-| `SingleRepository_PythonLarge` | `django/django` | 282 MB, so schedule-only. Carries `package.json` *without* `tsconfig.json`, proving TypeScript detection does not false-positive |
+| `SingleRepository_Python` | `pallets/flask` | Once a Python producer exists. `src/` layout, and every dependency is pure Python, so nothing builds from source on either platform |
 | `Monorepo_PnpmWorkspace` | `colinhacks/zod` | Root `package.json` + `tsconfig.json` + `pnpm-workspace.yaml`. clew classifies the root as one unit and never descends into `packages/`; the test pins that behaviour so a change to it is deliberate |
 | `Monorepo_MultiModuleMaven` | `apache/commons-math` | Nine `<module>` entries, no root `src/main/java`. **Currently fails** -- see below |
 | `Superproject_JavaCrossSubmodule` | `apache/commons-lang` + `apache/commons-text` | Cross-submodule symbol resolution between two Java repositories |
@@ -158,11 +157,48 @@ describes a design the code does not implement.
 `Monorepo_MultiModuleMaven` asserts the current failure rather than skipping it, so
 the gap is recorded in the suite and closing it flips a test from red to green.
 
-## Open
+One project per language to begin with. The suite proves the pipeline before it
+proves breadth, and every fixture costs a download, a toolchain and minutes on
+every scheduled run.
 
-- **Which Python and TypeScript SHAs to pin.** The projects are chosen; the commits
-  are not.
-- **Whether `django` earns its 282 MB** in the scheduled tier.
+`fastapi/fastapi` is the intended second Python fixture, not a rejected one. It is
+annotation-dense -- Pydantic models, generics, `Annotated[...]` -- which is where a
+semantic indexer earns its keep over a regex, whereas flask's older style proves
+the pipeline runs without proving much about resolution quality. It is deferred
+only because `pydantic-core` is a Rust-built wheel and a first fixture should have
+nothing that can fail to install.
+
+`django/django` was considered and dropped: its value was indexing-time
+measurement, which `commons-lang` already supplies, and 282 MB per scheduled run
+buys little beyond that.
+
+### Pinned commits
+
+Release tags where the project publishes meaningful ones, default-branch commits
+where it does not. `spring-petclinic`'s only tag is the ancient `1.5.x` Spring Boot
+line and `angular-realworld`'s tags are CI build numbers, so both pin to `main`.
+
+| Project | Ref | Commit |
+| --- | --- | --- |
+| `apache/commons-lang` | `rel/commons-lang-3.20.0` | `598dfc163b8b410fb3bb8794521206ec8dcec82a` |
+| `apache/commons-text` | `rel/commons-text-1.15.0` | `04e937470d3679cc163df85d82d5b6d2e3e71128` |
+| `spring-projects/spring-petclinic` | `main` | `f182358d02e4a68e52bdbabf55ca7800288511e7` |
+| `immerjs/immer` | `v11.1.15` | `a3be9df762c1dbe9959a011ddbab0ce838cbc468` |
+| `pallets/flask` | `3.1.3` | `22d924701a6ae2e4cd01e9a15bbaf3946094af65` |
+| `colinhacks/zod` | `v4.4.3` | `1fb56a5c18c27102dbc92260a4007c7732a0ccca` |
+| `apache/commons-math` | `master` | `912fd9c4ebc56a78293deb703443fe0f5d5f8f89` |
+| `gothinkster/angular-realworld-example-app` | `main` | `dd99ed2cf39c805d719f943c5d7061a5683d98a8` |
+
+**Pin commit SHAs, not tag names.** Apache's release tags are *annotated*, so
+`git/ref/tags/...` returns the tag object rather than the commit —
+`rel/commons-lang-3.20.0` resolves to `5027883…` as a tag and `598dfc1…` as a
+commit. A tarball URL built from the former is simply broken, and every SHA above
+was verified by resolving it back to a commit.
+
+The `commons-lang` and `commons-text` pins are coupled: `rel/commons-text-1.15.0`
+declares `commons.lang3.version` as `3.20.0`, which is why `commons-lang` is pinned
+to exactly that release. Moving one without the other silently breaks
+`Superproject_JavaCrossSubmodule`.
 
 ## Consequences
 

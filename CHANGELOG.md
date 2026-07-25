@@ -9,6 +9,14 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ### Added
 
+- ADR 1, a testing strategy: three tiers, hermetic by default. Unit and
+  producer-contract tests need no network and no toolchain; acceptance tests
+  download real projects at pinned commits and sit behind a build tag so
+  `go test ./...` never reaches the network. Lua tests use plenary.nvim, the
+  harness parrot.nvim, aerial.nvim and telescope.nvim all use. Tests are named
+  for the project layout they exercise, and `Superproject_JavaCrossSubmodule`
+  covers cross-submodule symbol resolution using `commons-text`'s dependency on
+  `commons-lang` at a matching version. Not implemented yet.
 - `doc/adr/`, holding architectural decision records in the Nygard format, and
   ADR 2: a producer is a TOML declaration, read by the clew binary rather than
   by the Neovim plugin's Lua, so a new language needs no clew release and

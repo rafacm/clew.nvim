@@ -13,6 +13,9 @@ node_modules/
 
 # test scratch: cloned plenary, isolated XDG dirs
 .tests/
+# `make test-lua` runs headless nvim from the repo root, and the instances
+# plenary spawns log here rather than under $XDG_STATE_HOME.
+nvim.log
 
 # editor / OS
 .DS_Store

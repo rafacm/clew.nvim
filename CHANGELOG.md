@@ -9,6 +9,14 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ### Added
 
+- `doc/adr/`, holding architectural decision records in the Nygard format, and
+  ADR 1: producer definitions are declared in clew's own TOML configuration
+  rather than in Go or in the Neovim plugin's Lua, so a new language needs no
+  clew release and `clew index` keeps working in CI and from other editors.
+  Not implemented yet; the record is the decision, not the feature.
+- "Adding a language" in `doc/README.md`, separating the half that is
+  language-agnostic today (reading an index) from the half that needs knowledge
+  written down somewhere (driving an indexer).
 - Producer registry in `internal/indexer`. A language is now one `Producer`
   implementation plus one line in the registry, where it used to be three
   coordinated edits across `discover.go` and `run.go` with no compiler check

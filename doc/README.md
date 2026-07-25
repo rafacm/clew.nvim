@@ -8,9 +8,11 @@ Longer-form material that does not belong in the main README: the reasoning behi
 
 - [Why a precomputed index?](#why-a-precomputed-index)
   - [Why SCIP specifically](#why-scip-specifically)
+- [Adding a language](#adding-a-language)
 - [Related Projects](#related-projects)
   - [What is not covered yet](#what-is-not-covered-yet)
 - [Credits](#credits)
+- [Decision records](#decision-records)
 
 ## Why a precomputed index?
 
@@ -43,6 +45,42 @@ Two properties make it the right substrate:
 
 1. **Symbols are globally-scoped strings.** For example `scip-java maven maven/org.example/svc 1.2.0 com/example/Foo#`, encoding manager, package, version and descriptor. There are no index-local integer IDs. That means two *separately produced* indexes can be merged and cross-resolved by plain string matching, so federating across submodules is a string join.
 2. **It is a format, not a tool.** Adding a language means writing a producer. The editor side never changes.
+
+## Adding a language
+
+The two halves of clew answer this differently, and the difference is easy to
+misread as a contradiction.
+
+**Reading an index is language-agnostic today, permanently.** `clew lsp` loads
+whatever sits at `.clew/index.scip` and nothing in the query or serve path branches
+on language. Index a Rust project with any tool you like, put the result there, and
+`gd` works on a language clew has never been taught.
+
+**Driving an indexer is knowledge that cannot be inferred**, and someone has to
+write it down: that `scip-typescript` wants `node_modules` present, that
+`scip-python` resolves imports from an installed environment, that Maven needs a
+four-step `javac` pipeline. So clew reads producer definitions from its own
+configuration rather than requiring a release per language:
+
+```toml
+# ~/.config/clew/producers.toml -- order is detection precedence.
+
+[[producer]]
+kind    = "python"
+detect  = ["pyproject.toml", "setup.py"]
+command = "npx --yes @sourcegraph/scip-python index --output $CLEW_OUTPUT"
+```
+
+Indexers whose invocation is a pipeline rather than a command -- Maven is four
+steps with the resolved classpath feeding the compiler -- stay as Go producers,
+because forcing them into a command template would make them worse. Everything
+else is configuration.
+
+The configuration is read by the `clew` binary, not by the Neovim plugin, so
+`clew index` keeps working in CI and from other editors. The plugin is built on top
+of the binary and never the other way round. The reasoning, the alternatives, and
+the trust question that keeps repository-local configuration unimplemented are in
+[ADR 2](adr/0002-producers-declared-in-clew-config.md).
 
 ## Related Projects
 
@@ -77,3 +115,11 @@ clew is mostly *assembly*. The hard parts belong to other people.
 - **[netmute/ctags-lsp](https://github.com/netmute/ctags-lsp)**: the architectural model, an external indexer behind a plain LSP server, so every editor's native client just works.
 - **[parrot.nvim](https://github.com/frankroeder/parrot.nvim)**: the shape and tone of the clew.nvim README and an inspiration for the logo.
 - **[AstroNvim](https://github.com/AstroNvim/AstroNvim)** and [astrocommunity](https://github.com/AstroNvim/astrocommunity).
+
+## Decision records
+
+Architectural decisions worth their own record, in [`doc/adr/`](adr/), in the
+[Nygard format](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions):
+context, decision, consequences.
+
+- [2. Producers are declared in clew's own configuration](adr/0002-producers-declared-in-clew-config.md)

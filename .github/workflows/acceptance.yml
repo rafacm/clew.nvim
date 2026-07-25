@@ -1,0 +1,65 @@
+# Tier 3: real projects, downloaded at pinned commits, indexed for real.
+#
+# On a schedule rather than per-change, because it needs a JDK, Maven, Node and
+# minutes. The trade is stated in doc/adr/0001-testing-strategy.md: a regression
+# in the Maven pipeline may be found a day late rather than on the commit that
+# caused it, and that is preferred to a per-change suite slow enough that people
+# stop running it.
+
+name: acceptance
+
+on:
+  schedule:
+    # 04:00 UTC daily, comfortably outside anyone's working hours.
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: acceptance
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: acceptance (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      # Set explicitly so the cache step and the suite agree on one path across
+      # both runners; cacheRoot reads XDG_CACHE_HOME before os.UserCacheDir.
+      XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Fixtures are keyed by commit SHA and never change under a given key, so
+      # the cache is safe to restore and only grows when a pin moves.
+      - name: cache downloaded fixtures
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/clew-test
+          key: clew-fixtures-${{ hashFiles('internal/acceptance/fixtures.go') }}
+          restore-keys: clew-fixtures-
+
+      - name: acceptance
+        run: make test-acceptance

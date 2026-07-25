@@ -48,8 +48,18 @@ func (mavenProducer) Detect(dir string) (string, bool) {
 // merged, where every unit's symbols collapse into the same anonymous package.
 //
 // The documented `dependencies.txt` mechanism does NOT produce coordinates here;
-// javacopts.txt does. doc/adr/0001-testing-strategy.md tracks this as
-// TestMavenSymbolsCarryCoordinates, which is not written yet.
+// javacopts.txt does. scip-java's aggregator reaches it through
+// ClasspathEntry.fromTargetroot, which reads targetroot/javacopts.txt when it
+// exists and falls back to dependency discovery when it does not.
+//
+// Asserted by TestAcceptance_SingleRepository_Maven/SymbolsCarryCoordinates.
+//
+// CAVEAT, and it is a live bug: the aggregator recovers the coordinate by
+// walking up from the `-d` directory to find a pom.xml, bounded by a REALPATH'D
+// sourceroot. u.Dir is whatever the user passed, so any project reached through
+// a symlink -- a symlinked workspace, anything under /tmp on macOS -- fails that
+// bound and degrades exactly as described above. See
+// TestAcceptance_SingleRepository_MavenViaSymlink.
 func (mavenProducer) Index(ctx context.Context, r *runner, u Unit) (string, error) {
 	targetroot := filepath.Join(u.Dir, "target", "clew-targetroot")
 	classes := filepath.Join(u.Dir, "target", "clew-classes")

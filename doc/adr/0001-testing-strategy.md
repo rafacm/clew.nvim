@@ -213,3 +213,46 @@ to exactly that release. Moving one without the other silently breaks
   pinned projects remaining public.
 - plenary.nvim becomes a development dependency, cloned in CI and by
   `tests/minimal_init.lua` locally. It is not a runtime dependency.
+
+## Implementation status
+
+Added 2026-07-25, after the decision above was carried out. The decision itself
+is unchanged; this records what landed and what the suite found on its first
+run.
+
+**Tiers 1 and 3 are implemented. Tier 2 is not**, because a producer can only be
+faked once it is a declaration rather than Go code, which is ADR 2. `make test`
+therefore runs tier 1 alone today, and will pick up tier 2 without changing.
+
+The `TestMavenSymbolsCarryCoordinates` the Context describes as a plan now
+exists, as `TestAcceptance_SingleRepository_Maven/SymbolsCarryCoordinates`; the
+reference in `internal/indexer/java.go` points at it.
+
+### What the suite found immediately
+
+Two defects, neither previously known, both now asserted as current failures in
+the same style as `Monorepo_MultiModuleMaven`:
+
+- **A symlink in the project path degrades every Maven coordinate.** The
+  aggregator recovers coordinates by walking up from the `-d` directory to a
+  `pom.xml`, bounded by a *realpath'd* sourceroot, while clew passes the path it
+  was given. The two disagree for any project behind a symlink, and the result
+  is precisely the `scip-java maven . . ` collapse this ADR was written to
+  defend against — reached by a route nobody had considered.
+  `TestAcceptance_SingleRepository_MavenViaSymlink`.
+- **`npm install` is assumed for every TypeScript unit,** so a yarn- or
+  pnpm-managed repository fails before `scip-typescript` runs.
+  `TestAcceptance_SingleRepository_TypeScript`.
+
+The first is worth dwelling on: it validates the argument in the Context. The
+bug is invisible locally, survives every hermetic test, and was found by the
+first acceptance run on a real project.
+
+### A correction to the pinned-commit table
+
+`immerjs/immer` is recorded above as `v11.1.15` at
+`a3be9df762c1dbe9959a011ddbab0ce838cbc468`, but the tree at that SHA declares
+`"version": "10.0.3-beta"`. The ref label and the commit disagree and the pin
+needs re-resolving. The SHA is left as recorded rather than quietly changed,
+since this table is the decision; `internal/acceptance/fixtures.go` carries the
+same note.

@@ -1,0 +1,103 @@
+# Tiers 1 and 2 on every change. Hermetic: no network, no toolchain, no
+# indexer. See doc/adr/0001-testing-strategy.md.
+#
+# Tier 3 lives in acceptance.yml and runs on a schedule, because it needs a JDK,
+# Maven, Node and minutes.
+
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is supported through WSL only -- the producers are shell
+        # commands assuming a POSIX shell -- so it is not in the matrix. That
+        # gap is stated rather than hidden.
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l ./cmd ./internal)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed for:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: vet
+        run: |
+          go vet ./...
+          # The acceptance package is excluded from ./... by its build tag, so
+          # it would otherwise never be compiled until a scheduled run.
+          go vet -tags acceptance ./internal/acceptance/
+
+      - name: build
+        run: make build
+
+      - name: test
+        run: go test -race ./...
+
+  lua:
+    name: lua (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          # clew requires 0.11+ for vim.lsp.config.
+          version: v0.11.0
+
+      # plenary is cloned into .tests/ by tests/minimal_init.lua on first run.
+      - name: test
+        run: make test-lua
+
+  docs:
+    name: docs are in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: v0.11.0
+
+      # doc/tags is committed so `:help clew` works from a source checkout.
+      # A stale one is invisible until a user tries <C-]>.
+      - name: helptags are current
+        run: |
+          make docs
+          if ! git diff --quiet -- doc/tags; then
+            echo "::error::doc/tags is stale; run 'make docs' and commit the result"
+            git diff -- doc/tags
+            exit 1
+          fi

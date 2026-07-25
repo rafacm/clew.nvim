@@ -8,10 +8,13 @@ drives it. The plugin is built on top of the binary and never the other way roun
 ## Commands
 
 ```sh
-make build   # go build -o bin/clew ./cmd/clew
-make test    # go test ./...
-make vet     # go vet ./...
-make docs    # regenerate doc/tags so :help clew works
+make build            # go build -o bin/clew ./cmd/clew
+make test             # tiers 1 and 2: hermetic, no network, no toolchain
+make test-go          # go test -race ./...
+make test-lua         # plenary, headless nvim
+make test-acceptance  # tier 3: real projects, real indexers, network required
+make vet              # go vet ./...
+make docs             # regenerate doc/tags so :help clew works
 ```
 
 `go.sum` is committed and the module graph is deliberately small: the SCIP
@@ -88,10 +91,46 @@ acceptance tests download real projects at pinned commits and sit behind a build
 tag, so `go test ./...` never reaches the network. Lua tests use `plenary.nvim`.
 Tests are named for the project layout they exercise.
 
-Not implemented yet. This is the current focus.
+Tiers 1 and 3 are implemented. **Tier 2 is not**, because a fakeable producer is
+a producer that can be *declared*, and that is ADR 2.
+
+- **Tier 1** lives beside the code it tests: `internal/indexer`,
+  `internal/index`, `internal/lsp`, and `tests/*_spec.lua`. Indexes are built
+  programmatically with the Go bindings, so no `.scip` blob is committed.
+- **Tier 3** lives in `internal/acceptance`, behind `//go:build acceptance`.
+  Fixtures are downloaded per the pinned-commit table in ADR 1 and cached under
+  `$XDG_CACHE_HOME/clew-test/<sha>/`; working copies are fresh per run.
+
+Two things to know before writing an acceptance test:
+
+- **Assert on properties, not bytes.** SCIP output moves with indexer versions
+  and `ScipTypeScriptPackage` is pinned to `@latest`, so any golden file rots.
+- **Realpath your fixture root.** `tempRoot` exists because indexing through an
+  unresolved path silently degrades every Maven coordinate; see the known gap
+  below. A test on a raw `t.TempDir()` measures macOS's `/var` symlink.
+
+CI runs tier 1 on Linux and macOS for every push and pull request, and tier 3 on
+a daily schedule. WSL is claimed in `README.md` and is not verified by CI.
 
 ## Known gaps
 
+- **A symlink in the project path destroys every Maven coordinate.** `scip-java`
+  bounds its search for the unit's `pom.xml` by a realpath'd sourceroot, while
+  clew passes the path the user gave. When the two disagree — any project
+  reached through a symlink, which includes everything under `/tmp` on macOS —
+  no pom is found and every symbol degrades to `scip-java maven . . `. This is
+  the invisible failure `internal/indexer/java.go` warns about, reached by a
+  different route. Resolving `u.Dir` with `filepath.EvalSymlinks` before
+  dispatching to a producer is the likely fix; it is not applied yet, and
+  `TestAcceptance_SingleRepository_MavenViaSymlink` asserts the current
+  behaviour so the fix flips a test rather than going unnoticed. Separately,
+  `--root` pointed *directly* at a symlink discovers nothing at all, because
+  `filepath.WalkDir` does not follow one.
+- **`npm install` is assumed for every TypeScript unit.** `typeScriptProducer`
+  runs it unconditionally, so a yarn- or pnpm-developed repository fails before
+  `scip-typescript` is ever reached — immer's dev-dependency graph is one npm's
+  resolver refuses outright. Detecting the lockfile is the fix.
+  `TestAcceptance_SingleRepository_TypeScript` asserts the current failure.
 - **Stale-buffer position mapping.** The index reports positions as of the last
   index, so `gd` drifts after edits. `staleness_check` reports index age; it does
   not fix positions. This is the product risk, not a rough edge.

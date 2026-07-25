@@ -164,6 +164,22 @@ catches *upstream* drift: `@latest` moving underneath clew, or a pinned fixture
 being renamed or made private. No pull-request trigger can see that, so the
 schedule stays even though pull requests now run the same suite.
 
+**Tier 3 runs in parallel, and three tests are deliberately serial.** No two
+concurrent tests may download the same artifact: a Maven local repository is not
+safe for concurrent writes of one artifact across processes, and a package
+manager's cache is no better. Go runs sequential tests before resuming parallel
+ones, so `SingleRepository_Maven`, `SingleRepository_MavenLarge` and
+`SingleRepository_Angular` act as barriers that warm `~/.m2` and bun's cache for
+the batch that follows. Adding a fixture means checking it against that rule —
+the full argument is at the top of `internal/acceptance/acceptance_test.go`. A
+flake here is worse than a slow job, because this check is advisory and a check
+people learn to ignore protects nothing.
+
+**Every download the suite repeats is cached in CI**, and the list is not
+self-maintaining: fixtures by commit SHA, `~/.m2`, and the npm, yarn and bun
+download caches. The last of these was missing until immer's yarn install — 43
+seconds, the slowest test in the suite — made the omission obvious.
+
 **The suite needs whatever package manager its fixtures declare.** clew installs a
 TypeScript unit with the manager named by its lockfile, so immer needs `yarn` and
 angular-realworld needs `bun`; `acceptance.yml` installs both with

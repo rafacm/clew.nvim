@@ -19,12 +19,51 @@ import (
 //
 // Tests are named for the project layout they exercise, so a gap in coverage is
 // visible from the test list alone.
+//
+// WHICH TESTS RUN IN PARALLEL, AND WHY THREE DO NOT
+//
+// Most tests here call t.Parallel(). Three deliberately do not, and marking them
+// parallel would trade a corrupt cache for a few seconds.
+//
+// The rule they enforce: NO TWO CONCURRENT TESTS MAY DOWNLOAD THE SAME ARTIFACT.
+// A Maven local repository is not safe for concurrent writes of one artifact
+// across processes, and a package manager's content-addressed cache is no better;
+// two processes fetching the same jar is the classic way to get a truncated file
+// and a job that fails for reasons no pull request caused. That is fatal here in
+// particular: this suite is advisory by design, so a flake teaches people to
+// ignore it, and then it protects nothing.
+//
+// Go runs every sequential test to completion BEFORE resuming the parallel ones,
+// which turns an unmarked test into a barrier. Three of them warm everything the
+// parallel batch shares:
+//
+//   - SingleRepository_Maven downloads spring-petclinic's dependencies, the
+//     scip-javac and scip-java classpaths, and the Maven plugins every Maven unit
+//     resolves. MavenViaSymlink then reads petclinic's from a warm ~/.m2.
+//   - SingleRepository_MavenLarge downloads commons-lang's, which
+//     Superproject_JavaCrossSubmodule and Superproject_JavaAndAngular both
+//     resolve again.
+//   - SingleRepository_Angular fills bun's cache for angular-realworld, which
+//     Superproject_JavaAndAngular installs again.
+//
+// What is left in the parallel batch touches only artifacts nothing else in it
+// wants: commons-text, commons-math, immer's yarn graph, zod's tarball. Each
+// fetches its fixture into its own t.TempDir(), and concurrent downloads of the
+// tarball cache are already handled by fetch's stage-and-rename.
+//
+// Adding a fixture means checking it against that rule. If it shares a dependency
+// graph with something already in the batch, either it warms it sequentially or
+// it joins the test that owns it. `go test` caps concurrency at GOMAXPROCS, so
+// the batch never fans out wider than the runner has cores.
 
 // ------------------------------------------------------- SingleRepository_Maven
 
 // spring-petclinic is the pipeline's original validation target. It carries
 // both a pom.xml and a build.gradle, so it also covers producer precedence.
 func TestAcceptance_SingleRepository_Maven(t *testing.T) {
+	// Not parallel: this is the barrier that warms ~/.m2 with the scip-javac and
+	// scip-java classpaths, the Maven plugins and petclinic's dependencies. See
+	// the note at the top.
 	requireTools(t, "mvn", "javac", "java")
 
 	root := singleRepository(t, petclinic)
@@ -102,6 +141,7 @@ func TestAcceptance_SingleRepository_Maven(t *testing.T) {
 // coordinates rather than on the resolved path -- tier 1's
 // TestDiscover_SymlinkInTheRootPathIsResolved covers the mechanism. See #2.
 func TestAcceptance_SingleRepository_MavenViaSymlink(t *testing.T) {
+	t.Parallel()
 	requireTools(t, "mvn", "javac", "java")
 
 	base := tempRoot(t)
@@ -153,6 +193,8 @@ func TestAcceptance_SingleRepository_MavenViaSymlink(t *testing.T) {
 // commons-lang is a single module with a real src/main/java, and the
 // indexing-time measurement.
 func TestAcceptance_SingleRepository_MavenLarge(t *testing.T) {
+	// Not parallel: this is the barrier that warms commons-lang's dependencies
+	// for JavaCrossSubmodule and JavaAndAngular. See the note at the top.
 	requireTools(t, "mvn", "javac", "java")
 
 	root := singleRepository(t, commonsLang)
@@ -185,6 +227,7 @@ func TestAcceptance_SingleRepository_MavenLarge(t *testing.T) {
 // The TypeScript pipeline itself is proven by SingleRepository_Angular too;
 // what is exercised here and nowhere else is the yarn branch of planInstall.
 func TestAcceptance_SingleRepository_TypeScript(t *testing.T) {
+	t.Parallel()
 	requireTools(t, "node", "npm", "npx", "yarn")
 
 	root := singleRepository(t, immer)
@@ -242,6 +285,9 @@ func TestAcceptance_SingleRepository_TypeScript(t *testing.T) {
 // only because npm's fresh resolution of this particular tree happens to work;
 // the bun branch of planInstall is what runs now.
 func TestAcceptance_SingleRepository_Angular(t *testing.T) {
+	// Not parallel: this is the barrier that warms bun's cache for
+	// angular-realworld, which JavaAndAngular installs again. See the note at the
+	// top.
 	requireTools(t, "node", "npm", "npx", "bun")
 
 	root := singleRepository(t, angularReal)
@@ -324,6 +370,7 @@ func TestAcceptance_SingleRepository_Python(t *testing.T) {
 // Discovery only: the classification is the claim, and a pnpm install of the
 // whole workspace buys nothing the immer fixture does not already cover.
 func TestAcceptance_Monorepo_PnpmWorkspace(t *testing.T) {
+	t.Parallel()
 	root := singleRepository(t, zod)
 
 	got := units(t, root)
@@ -349,6 +396,7 @@ func TestAcceptance_Monorepo_PnpmWorkspace(t *testing.T) {
 // descend, so an aggregator pom yields a unit with no sources. Recording the
 // gap in the suite means closing it flips a test from red to green.
 func TestAcceptance_Monorepo_MultiModuleMaven(t *testing.T) {
+	t.Parallel()
 	requireTools(t, "mvn", "javac", "java")
 
 	root := singleRepository(t, commonsMath)
@@ -388,6 +436,7 @@ func TestAcceptance_Monorepo_MultiModuleMaven(t *testing.T) {
 // makes the symbol strings diverge and this test fails for a reason that has
 // nothing to do with clew.
 func TestAcceptance_Superproject_JavaCrossSubmodule(t *testing.T) {
+	t.Parallel()
 	requireTools(t, "mvn", "javac", "java")
 
 	root := superproject(t, map[string]Project{
@@ -445,6 +494,7 @@ func findCrossUnitSymbol(t *testing.T, store *index.Store, defPrefix, refPrefix 
 // unit is the same bun-managed fixture, and clew installs it with the manager it
 // declares.
 func TestAcceptance_Superproject_JavaAndAngular(t *testing.T) {
+	t.Parallel()
 	requireTools(t, "mvn", "javac", "java", "node", "npm", "npx", "bun")
 
 	root := superproject(t, map[string]Project{

@@ -20,27 +20,23 @@ A Neovim plugin that gives you go-to-definition and find-references served from 
 
 ## Features
 
-`clew.nvim` inverts the usual trade-off. Instead of running a semantic engine *inside* your editor, it runs the semantic engine **out-of-band**, on save, on build, or in CI, and leaves your editor querying a static index.
-
-You keep compiler-grade correctness. You give up nothing but freshness.
+Instead of running a semantic engine *inside* your editor, `clew.nvim` runs it **out-of-band**, on save, on build or in CI, and leaves Neovim querying a static index. You keep compiler-grade correctness and give up nothing but freshness.
 
 - **No resident language server.** No JVM in your editor session. Indexing happens when *you* ask, not continuously in the background.
-- **One index for the whole project**, including **git superprojects**. Fifty submodules produce one index and one server process, not fifty.
-- **Navigate *between* submodules.** Separate language servers each know only their own repo; a merged SCIP index resolves across them, because SCIP symbols are globally-scoped strings.
-- **Language-agnostic by construction.** Anything with a SCIP indexer lands in the same index with the same query path. Adding a language means adding an *indexer*, never touching the editor side.
-- **Compiler-grade, not heuristic.** Real overload resolution, real generics, real classpath awareness, including versioned symbols for third-party jars and the JDK itself.
-- **Native Neovim integration.** `clew` speaks LSP over stdio, so `gd`, `gr`, `<C-]>`, Telescope, fzf-lua and aerial.nvim all work with no extra glue.
-- **No build modification required.** Your `pom.xml` is never touched. Maven is invoked only for dependency *resolution*, never for a build.
+- **Compiler-grade, not heuristic.** [`scip-java`](https://github.com/scip-code/scip-java) indexes through [`javac`](https://docs.oracle.com/en/java/javase/21/docs/specs/man/javac.html) itself, so you get real overload resolution, real generics and real classpath awareness, including versioned symbols for third-party jars and the JDK.
+- **One index for the whole project.** clew discovers **units**, meaning build roots such as a [`pom.xml`](https://maven.apache.org/pom.html), a [`build.gradle`](https://docs.gradle.org/current/userguide/build_file_basics.html) or a [`package.json`](https://docs.npmjs.com/cli/v11/configuring-npm/package-json), and merges whatever it finds into one index. Fifty submodules produce one index and one server process, not fifty.
+- **Navigate *between* submodules.** Separate language servers each know only their own repo; a merged [SCIP](https://scip-code.org) index resolves across them, because SCIP symbols are globally-scoped strings.
+- **Language-agnostic by construction.** Anything with a [SCIP indexer](https://scip-code.org) lands in the same index with the same query path. Adding a language means adding an *indexer*, never touching the editor side.
+- **Native Neovim integration.** `clew` is an ordinary [LSP](https://microsoft.github.io/language-server-protocol/) server over stdio, driven by [Neovim's built-in LSP client](https://neovim.io/doc/user/lsp.html), so [`gd`, `gr`](https://neovim.io/doc/user/lsp.html#lsp-defaults), [`<C-]>`](https://neovim.io/doc/user/tagsrch.html#CTRL-%5D), [Telescope](https://github.com/nvim-telescope/telescope.nvim), [fzf-lua](https://github.com/ibhagwan/fzf-lua) and [aerial.nvim](https://github.com/stevearc/aerial.nvim) all work with no extra glue.
+- **No build modification required.** Your `pom.xml` is never touched. [Maven](https://maven.apache.org) is invoked only for dependency *resolution*, never for a build.
 
-### Project shapes
-
-clew does not distinguish between project layouts. It discovers **units**, meaning build roots such as a `pom.xml`, a `build.gradle` or a `package.json`, and merges whatever it finds into one index. A single-project repository is simply the case where there is one unit.
+Project layout is not a special case. A single-project repository is simply the case where there is one unit:
 
 | Shape | What clew does |
 | --- | --- |
 | **Single repository** | One unit, one index. No configuration needed. |
 | **[Git superproject](https://git-scm.com/docs/gitsubmodules)** | One unit per submodule, merged into one index. Navigation crosses submodule boundaries. |
-| **Monorepo** | One unit per build root, merged the same way. Submodules are not required. |
+| **[Monorepo](https://monorepo.tools)** | One unit per build root, merged the same way. Submodules are not required. |
 
 ## Getting Started
 

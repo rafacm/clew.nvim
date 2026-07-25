@@ -9,6 +9,30 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ### Added
 
+- **Tiers 1 and 3 of ADR 1 are implemented; the repository has tests.** Tier 1 is
+  hermetic — discovery against trees built in `t.TempDir()`, merge and query
+  against `scip.Index` values constructed with the Go bindings, the language
+  server driven end to end over an in-memory pipe, and the Lua surface under
+  plenary. No `.scip` blob is committed and no indexer is invoked. Tier 3 lives
+  in `internal/acceptance` behind `//go:build acceptance`, downloading the
+  pinned projects from ADR 1's table and asserting on properties rather than
+  bytes. `make test` runs the hermetic tiers; `make test-go`, `make test-lua`
+  and `make test-acceptance` address them individually.
+- **Tier 2 is not implemented.** A producer can only be faked once it is a
+  declaration rather than Go code, so it waits on ADR 2. `make test` therefore
+  runs tier 1 alone today.
+- `TestAcceptance_Superproject_JavaCrossSubmodule` demonstrates clew's central
+  claim on real code: `org/apache/commons/lang3/Validate#`, carrying the
+  coordinate `maven/org.apache.commons/commons-lang3 3.20.0`, is defined in a
+  `commons-lang` checkout and resolved from a reference in a separately indexed
+  `commons-text`. Cross-unit resolution is a string join, demonstrated rather
+  than asserted in the abstract.
+- CI: GitHub Actions over Linux and macOS. `test.yml` runs tier 1, `gofmt`,
+  `go vet` (including under the `acceptance` tag, which `./...` otherwise never
+  compiles) and a check that committed `doc/tags` is current. `acceptance.yml`
+  runs tier 3 daily, with the fixture download cached by commit SHA. WSL is
+  claimed in `README.md` and is not verified by CI; the gap is stated rather
+  than hidden.
 - `AGENTS.md`, the instructions for working in this repository: commands, the
   invariants that fail silently when broken, the three documentation surfaces
   that must stay in sync, known gaps and open questions. `CLAUDE.md` imports it,
@@ -20,7 +44,7 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
   harness parrot.nvim, aerial.nvim and telescope.nvim all use. Tests are named
   for the project layout they exercise, and `Superproject_JavaCrossSubmodule`
   covers cross-submodule symbol resolution using `commons-text`'s dependency on
-  `commons-lang` at a matching version. Not implemented yet.
+  `commons-lang` at a matching version.
 - `doc/adr/`, holding architectural decision records in the Nygard format, and
   ADR 2: a producer is a TOML declaration, read by the clew binary rather than
   by the Neovim plugin's Lua, so a new language needs no clew release and
@@ -52,6 +76,21 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ### Changed
 
+- Two defects are newly **recorded, not fixed**, both found by the acceptance
+  suite on its first run and both listed under known gaps in `AGENTS.md`. Each
+  is asserted as a current failure, following the precedent set for
+  multi-module Maven, so closing it flips a test rather than going unnoticed:
+  - **A symlink anywhere in the project path destroys every Maven coordinate.**
+    `scip-java` bounds its search for the unit's `pom.xml` by a realpath'd
+    sourceroot while clew passes the path it was given, so no pom is found and
+    every symbol degrades to `scip-java maven . . ` — the invisible failure
+    `java.go` warns about, reached by a route nobody had considered. It applies
+    to any project under a symlinked workspace, and to everything under `/tmp`
+    on macOS. `TestAcceptance_SingleRepository_MavenViaSymlink` reproduces it;
+    `filepath.EvalSymlinks` on `u.Dir` is the likely fix.
+  - **`npm install` is assumed for every TypeScript unit,** so a yarn- or
+    pnpm-managed repository fails before `scip-typescript` runs at all.
+    `TestAcceptance_SingleRepository_TypeScript` reproduces it on immer.
 - Staleness is described honestly in `doc/README.md`: "nearly free" is
   qualified with the drift that follows editing, the clangd hybrid clew is
   aimed at, and the fact that `staleness_check` today only reports index age.

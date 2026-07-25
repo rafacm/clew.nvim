@@ -11,6 +11,9 @@ target/
 node_modules/
 .clew-unit.scip
 
+# test scratch: cloned plenary, isolated XDG dirs
+.tests/
+
 # editor / OS
 .DS_Store
 *.swp

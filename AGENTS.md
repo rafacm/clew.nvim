@@ -180,6 +180,15 @@ self-maintaining: fixtures by commit SHA, `~/.m2`, and the npm, yarn and bun
 download caches. The last of these was missing until immer's yarn install — 43
 seconds, the slowest test in the suite — made the omission obvious.
 
+**The package managers' cache directories are pinned in `acceptance.yml`'s `env:`,
+not left to their defaults.** `XDG_CACHE_HOME` is already overridden there so the
+fixture cache has one path on both runners, and yarn classic honours it too: on
+Linux its cache followed into the workspace, outside the cached path, and was
+discarded on every run. Nothing failed — the install simply never got faster,
+which is only visible if someone is timing it. `YARN_CACHE_FOLDER`,
+`BUN_INSTALL_CACHE_DIR` and `npm_config_cache` now name the paths the cache step
+stores, so the two cannot drift apart.
+
 **The suite needs whatever package manager its fixtures declare.** clew installs a
 TypeScript unit with the manager named by its lockfile, so immer needs `yarn` and
 angular-realworld needs `bun`; `acceptance.yml` installs both with

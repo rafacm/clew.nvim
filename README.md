@@ -40,6 +40,14 @@ Project layout is not a special case. A single-project repository is simply the 
 
 ## Getting Started
 
+### Platforms
+
+**macOS**, **Linux**, and **Windows via [WSL](https://learn.microsoft.com/windows/wsl/)**.
+
+Native Windows is not supported. clew drives each indexer as a shell command and
+the ones it ships assume a POSIX shell; several SCIP indexers need WSL or a
+container on Windows regardless of what clew does.
+
 ### Dependencies
 
 - [`neovim 0.11+`](https://github.com/neovim/neovim/releases), for `vim.lsp.config` and `vim.lsp.enable`

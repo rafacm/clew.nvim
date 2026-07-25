@@ -32,6 +32,9 @@ boundaries because SCIP symbols are globally-scoped strings.
 ==============================================================================
 2. REQUIREMENTS                                             *clew-requirements*
 
+Platforms: macOS, Linux, and Windows via WSL. Native Windows is not supported;
+indexers are driven as shell commands assuming a POSIX shell.
+
   - Neovim 0.11+ (for |vim.lsp.config|)
   - the `clew` binary on $PATH, or built in the plugin directory via `make`
 

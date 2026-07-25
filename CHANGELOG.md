@@ -18,6 +18,9 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
   exception: it needs cross-unit state, per-step error policy and a generated
   file, which are the three criteria for justifying any future Go producer.
   Not implemented yet; the record is the decision, not the feature.
+- Supported platforms stated in `README.md` and `doc/clew.txt`: macOS, Linux,
+  and Windows via WSL. Native Windows is not supported, because indexers are
+  driven as shell commands assuming a POSIX shell.
 - "Adding a language" in `doc/README.md`, separating the half that is
   language-agnostic today (reading an index) from the half that needs knowledge
   written down somewhere (driving an indexer).

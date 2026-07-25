@@ -34,6 +34,15 @@ These were established empirically, most of them the expensive way. Each one fai
 - **Cross-unit resolution is a string join on symbol names**, which embed the
   Maven coordinate *including version*. Anything that changes how coordinates are
   stamped breaks navigation between units and nothing else.
+- **The project root is realpath'd before discovery walks it**, in
+  `indexer.resolveRoot`. `scip-java` bounds its search for a unit's `pom.xml` by a
+  *realpath'd* sourceroot, so a symlink surviving into `Unit.Dir` — a symlinked
+  workspace, anything under `/tmp` on macOS — makes the search escape that bound
+  and degrades every symbol exactly as a missing `javacopts.txt` does. Resolving
+  the root is enough for every unit because `filepath.WalkDir` does not follow
+  symlinks; it is also the only reason `--root` may name one at all. Asserted by
+  `TestDiscover_SymlinkInTheRootPathIsResolved` and
+  `TestAcceptance_SingleRepository_MavenViaSymlink`.
 - **`Document.language` is empty** from `scip-typescript` (`scip-java` sets
   `"java"`). Never branch on it.
 - **Three occurrence range encodings exist** — `single_line_range`,
@@ -110,9 +119,10 @@ Two things to know before writing an acceptance test:
 
 - **Assert on properties, not bytes.** SCIP output moves with indexer versions
   and `ScipTypeScriptPackage` is pinned to `@latest`, so any golden file rots.
-- **Realpath your fixture root.** `tempRoot` exists because indexing through an
-  unresolved path silently degrades every Maven coordinate; see the known gap
-  below. A test on a raw `t.TempDir()` measures macOS's `/var` symlink.
+- **Realpath your fixture root.** `tempRoot` hands back a `t.TempDir()` with its
+  own symlinks resolved, so that a test about paths measures clew rather than
+  macOS's `/var` symlink — and so that a test *about* symlinks measures only the
+  one it created.
 
 ### CI
 
@@ -158,18 +168,6 @@ WSL is claimed in `README.md` and is not verified by CI.
 
 ## Known gaps
 
-- **A symlink in the project path destroys every Maven coordinate.** `scip-java`
-  bounds its search for the unit's `pom.xml` by a realpath'd sourceroot, while
-  clew passes the path the user gave. When the two disagree — any project
-  reached through a symlink, which includes everything under `/tmp` on macOS —
-  no pom is found and every symbol degrades to `scip-java maven . . `. This is
-  the invisible failure `internal/indexer/java.go` warns about, reached by a
-  different route. Resolving `u.Dir` with `filepath.EvalSymlinks` before
-  dispatching to a producer is the likely fix; it is not applied yet, and
-  `TestAcceptance_SingleRepository_MavenViaSymlink` asserts the current
-  behaviour so the fix flips a test rather than going unnoticed. Separately,
-  `--root` pointed *directly* at a symlink discovers nothing at all, because
-  `filepath.WalkDir` does not follow one.
 - **`npm install` is assumed for every TypeScript unit.** `typeScriptProducer`
   runs it unconditionally, so a yarn- or pnpm-developed repository fails before
   `scip-typescript` is ever reached — immer's dev-dependency graph is one npm's

@@ -85,36 +85,46 @@ func TestAcceptance_SingleRepository_Maven(t *testing.T) {
 
 // ------------------------------------------- SingleRepository_MavenViaSymlink
 
-// Indexing a project through a symlinked path silently degrades EVERY symbol to
-// the anonymous `scip-java maven . . ` coordinate.
+// A project reached through a symlink must index exactly like one that is not.
 //
-// scip-java bounds its search for the unit's pom.xml by a realpath'd sourceroot
-// while clew hands it the path the user gave. When those disagree -- which they
-// do for any project reached through a symlink, including everything under
-// /tmp on macOS -- the search escapes the bound, no pom is found, and no
-// coordinate is stamped.
+// It did not, until indexer.resolveRoot. scip-java bounds its search for the
+// unit's pom.xml by a realpath'd sourceroot; clew used to hand it the spelling
+// the user typed, so for any project behind a symlink -- a symlinked workspace,
+// everything under /tmp on macOS -- the search escaped the bound, no pom was
+// found, and EVERY symbol degraded to the anonymous `scip-java maven . . `
+// coordinate.
 //
-// This is the failure mode AGENTS.md describes as invisible: navigation inside
-// the unit keeps working, so nothing surfaces until units merge and every unit
-// collapses into the same anonymous package.
-//
-// The test asserts the CURRENT, BROKEN behaviour, following the precedent set
-// by Monorepo_MultiModuleMaven. Resolving u.Dir with filepath.EvalSymlinks
-// before handing it to the producers fixes it and flips this test, at which
-// point the expectation below should be inverted rather than deleted.
+// That failure was invisible by construction: the degraded form is internally
+// consistent, so navigation inside the unit kept working and nothing surfaced
+// until units merged and collapsed into the same anonymous package. Nothing
+// short of this assertion catches a regression, which is why it is on the
+// coordinates rather than on the resolved path -- tier 1's
+// TestDiscover_SymlinkInTheRootPathIsResolved covers the mechanism. See #2.
 func TestAcceptance_SingleRepository_MavenViaSymlink(t *testing.T) {
 	requireTools(t, "mvn", "javac", "java")
 
 	base := tempRoot(t)
 	checkout(t, petclinic, filepath.Join(base, "workspace", petclinic.Name()))
-
-	// The symlink is an INTERMEDIATE path component, which is the shape a
-	// symlinked workspace actually takes. Pointing --root directly at a symlink
-	// is a separate matter: filepath.WalkDir does not follow one, so Discover
-	// finds no units at all.
 	if err := os.Symlink(filepath.Join(base, "workspace"), filepath.Join(base, "link")); err != nil {
 		t.Skipf("cannot create a symlink here: %v", err)
 	}
+
+	// An INTERMEDIATE symlink is the shape a symlinked workspace takes; --root
+	// pointed directly at one is the second half of the same defect, since
+	// filepath.WalkDir does not follow a symlink either.
+	t.Run("Discovery", func(t *testing.T) {
+		got := units(t, filepath.Join(base, "link", petclinic.Name()))
+		if len(got) != 1 || got[0] != ":maven" {
+			t.Fatalf("units through an intermediate symlink = %v, want [:maven]", got)
+		}
+		link := filepath.Join(base, "link-to-project")
+		if err := os.Symlink(filepath.Join(base, "workspace", petclinic.Name()), link); err != nil {
+			t.Skipf("cannot create a symlink here: %v", err)
+		}
+		if got := units(t, link); len(got) != 1 || got[0] != ":maven" {
+			t.Fatalf("units with --root at a symlink = %v, want [:maven]", got)
+		}
+	})
 
 	store, _ := buildIndex(t, filepath.Join(base, "link", petclinic.Name()))
 
@@ -127,13 +137,14 @@ func TestAcceptance_SingleRepository_MavenViaSymlink(t *testing.T) {
 		}
 	}
 
-	if degraded == 0 && withCoords > 0 {
-		t.Fatal("coordinates now survive a symlinked project path -- " +
-			"the bug is fixed: invert this expectation, and drop the note from " +
-			"the known-gaps list in AGENTS.md")
+	if degraded > 0 {
+		t.Errorf("%d symbols degraded to the anonymous `maven . . ` coordinate; "+
+			"the symlinked project path is reaching scip-java unresolved again", degraded)
 	}
-	t.Logf("known defect reproduced: %d symbols degraded to `maven . . `, %d carry coordinates",
-		degraded, withCoords)
+	if withCoords == 0 {
+		t.Fatal("no petclinic symbol carries a maven/<group>/<artifact> <version> coordinate")
+	}
+	t.Logf("%d symbols carry real coordinates through a symlinked path", withCoords)
 }
 
 // -------------------------------------------------- SingleRepository_MavenLarge

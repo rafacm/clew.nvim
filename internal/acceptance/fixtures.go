@@ -225,15 +225,13 @@ func checkout(t *testing.T, p Project, dest string) string {
 
 // tempRoot is t.TempDir() with every symlink resolved.
 //
-// This is NOT cosmetic. On macOS t.TempDir() hands back a path under /var,
-// which is a symlink to /private/var, and scip-java bounds its search for the
-// unit's pom.xml by a realpath'd sourceroot. Given an unresolved path the
-// search escapes the bound, no pom is found, and every symbol silently
-// degrades to `scip-java maven . . ` -- so a suite run on an unresolved
-// tmpdir measures the symlink, not clew.
-//
-// The degradation itself is a real clew defect, not a test artifact; see
-// TestAcceptance_SingleRepository_MavenViaSymlink.
+// On macOS t.TempDir() hands back a path under /var, which is a symlink to
+// /private/var. clew now resolves its own root -- indexer.resolveRoot -- so an
+// unresolved tmpdir no longer breaks indexing, but it does make every fixture
+// tree reachable by two spellings, which is not what any test here means to
+// measure. TestAcceptance_SingleRepository_MavenViaSymlink depends on it
+// outright: it asserts something about a symlink, so the ONLY symlink in its
+// path must be the one it created.
 func tempRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := filepath.EvalSymlinks(t.TempDir())

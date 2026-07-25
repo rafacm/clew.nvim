@@ -76,21 +76,16 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ### Changed
 
-- Two defects are newly **recorded, not fixed**, both found by the acceptance
-  suite on its first run and both listed under known gaps in `AGENTS.md`. Each
-  is asserted as a current failure, following the precedent set for
-  multi-module Maven, so closing it flips a test rather than going unnoticed:
+- Two defects were found by the acceptance suite on its first run, each asserted
+  as a current failure following the precedent set for multi-module Maven, so
+  that closing it flips a test rather than going unnoticed. The mechanism has
+  now been exercised in both directions:
   - **A symlink anywhere in the project path destroys every Maven coordinate.**
-    `scip-java` bounds its search for the unit's `pom.xml` by a realpath'd
-    sourceroot while clew passes the path it was given, so no pom is found and
-    every symbol degrades to `scip-java maven . . ` — the invisible failure
-    `java.go` warns about, reached by a route nobody had considered. It applies
-    to any project under a symlinked workspace, and to everything under `/tmp`
-    on macOS. `TestAcceptance_SingleRepository_MavenViaSymlink` reproduces it;
-    `filepath.EvalSymlinks` on `u.Dir` is the likely fix.
+    Recorded as issue #2 and **fixed the same day** — see *Fixed*, below.
   - **`npm install` is assumed for every TypeScript unit,** so a yarn- or
     pnpm-managed repository fails before `scip-typescript` runs at all.
-    `TestAcceptance_SingleRepository_TypeScript` reproduces it on immer.
+    `TestAcceptance_SingleRepository_TypeScript` reproduces it on immer. Still
+    open, and listed under known gaps in `AGENTS.md`.
 - Staleness is described honestly in `doc/README.md`: "nearly free" is
   qualified with the drift that follows editing, the clangd hybrid clew is
   aimed at, and the fact that `staleness_check` today only reports index age.
@@ -117,6 +112,22 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ### Fixed
 
+- **A symlink in the project path no longer destroys every Maven coordinate**
+  (issue #2). `scip-java` bounds its search for the unit's `pom.xml` by a
+  *realpath'd* sourceroot while clew passed the path the user gave, so for any
+  project behind a symlink — a symlinked workspace, everything under `/tmp` on
+  macOS — no pom was found and every symbol degraded to `scip-java maven . . `.
+  All 158 spring-petclinic symbols were affected. The degraded form is
+  internally consistent, so navigation inside the unit kept working and nothing
+  surfaced until units merged and collapsed into one anonymous package.
+  `indexer.resolveRoot` now resolves the root once, before discovery walks it,
+  which fixes every producer rather than Maven alone: `filepath.WalkDir` does
+  not follow symlinks, so a real root guarantees a real `Unit.Dir`. The same
+  change makes `--root` pointed *directly* at a symlink work, where it
+  previously discovered nothing at all for the same reason.
+  `TestAcceptance_SingleRepository_MavenViaSymlink` now asserts that coordinates
+  survive; `TestDiscover_SymlinkInTheRootPathIsResolved` and
+  `TestDiscover_RootItselfIsASymlink` cover the mechanism hermetically.
 - The project builds. The SCIP Go bindings moved with the format's transfer to
   the `scip-code` org and are now their own module, so the pinned
   `github.com/sourcegraph/scip v0.6.0` predated the typed occurrence ranges

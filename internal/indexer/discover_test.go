@@ -244,6 +244,65 @@ func TestDiscover_RelativeRootIsResolved(t *testing.T) {
 	assertUnits(t, discovered(t, "."), []string{":maven"})
 }
 
+// A symlink in the root path must not survive into Unit.Dir. scip-java bounds
+// its search for the unit's pom.xml by a realpath'd sourceroot, so an
+// unresolved Dir degrades every Maven coordinate the unit defines -- and does
+// it silently, since navigation inside the unit keeps working. See resolveRoot.
+func TestDiscover_SymlinkInTheRootPathIsResolved(t *testing.T) {
+	base := realTempDir(t)
+	svc := filepath.Join(base, "workspace", "svc")
+	if err := os.MkdirAll(svc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(svc, "pom.xml"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(base, "workspace"), filepath.Join(base, "link")); err != nil {
+		t.Skipf("cannot create a symlink here: %v", err)
+	}
+
+	units, err := Discover(filepath.Join(base, "link", "svc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(units) != 1 {
+		t.Fatalf("got %d units, want 1", len(units))
+	}
+	if units[0].Dir != svc {
+		t.Errorf("Dir = %q, want the resolved %q", units[0].Dir, svc)
+	}
+}
+
+// --root pointed directly at a symlink. filepath.WalkDir does not follow one,
+// so without resolution this finds nothing at all rather than degrading.
+func TestDiscover_RootItselfIsASymlink(t *testing.T) {
+	base := realTempDir(t)
+	svc := filepath.Join(base, "svc")
+	if err := os.MkdirAll(svc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(svc, "pom.xml"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(svc, link); err != nil {
+		t.Skipf("cannot create a symlink here: %v", err)
+	}
+
+	assertUnits(t, discovered(t, link), []string{":maven"})
+}
+
+// realTempDir is t.TempDir() with its own symlinks resolved, so that a test
+// about symlinks measures the one it created rather than macOS's /var.
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func TestDiscover_MissingRootIsNotFatal(t *testing.T) {
 	units, err := Discover(filepath.Join(t.TempDir(), "nope"))
 	if err != nil {

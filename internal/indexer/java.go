@@ -48,8 +48,8 @@ func (mavenProducer) Detect(dir string) (string, bool) {
 // merged, where every unit's symbols collapse into the same anonymous package.
 //
 // The documented `dependencies.txt` mechanism does NOT produce coordinates here;
-// javacopts.txt does. NOTES.md tracks this as TestMavenSymbolsCarryCoordinates,
-// which is not written yet.
+// javacopts.txt does. doc/adr/0001-testing-strategy.md tracks this as
+// TestMavenSymbolsCarryCoordinates, which is not written yet.
 func (mavenProducer) Index(ctx context.Context, r *runner, u Unit) (string, error) {
 	targetroot := filepath.Join(u.Dir, "target", "clew-targetroot")
 	classes := filepath.Join(u.Dir, "target", "clew-classes")

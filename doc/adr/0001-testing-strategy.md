@@ -8,8 +8,8 @@
 clew has no tests. Not few — none. `make test` runs `go test ./...` against zero
 test files, there is no Lua harness, and there is no CI. `README.md:15` describes
 an intended v1, and `internal/indexer/java.go:40` cites
-`TestMavenSymbolsCarryCoordinates` as though it exists; it is a plan in
-`NOTES.md:73`.
+`TestMavenSymbolsCarryCoordinates` as though it exists. It does not; it is a plan,
+recorded here.
 
 Three things make this more urgent than the usual backlog item.
 
@@ -79,8 +79,8 @@ repository.
 Surveyed five plugins: parrot.nvim, aerial.nvim and telescope.nvim all use
 plenary's busted runner with `*_spec.lua` and a `tests/minimal_init.lua`;
 lazy.nvim uses real busted via `.busted` and `nvim -l`; blink.cmp has no Lua suite
-at all, so the repo-layout precedent `NOTES.md:86` borrows from it does not extend
-to testing.
+at all, so the repo-layout precedent `AGENTS.md` records borrowing from it does not
+extend to testing.
 
 plenary wins on setup cost: one `git clone --depth 1` and a minimal init, with no
 LuaRocks and no `busted` install. That matters because CI already needs Go, and

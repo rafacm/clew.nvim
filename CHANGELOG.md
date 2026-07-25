@@ -9,6 +9,10 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ### Added
 
+- `AGENTS.md`, the instructions for working in this repository: commands, the
+  invariants that fail silently when broken, the three documentation surfaces
+  that must stay in sync, known gaps and open questions. `CLAUDE.md` imports it,
+  so every agent reads one file.
 - ADR 1, a testing strategy: three tiers, hermetic by default. Unit and
   producer-contract tests need no network and no toolchain; acceptance tests
   download real projects at pinned commits and sit behind a build tag so
@@ -62,6 +66,15 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 - "Why a precomputed index?", "Related Projects" and "Credits" moved out of
   `README.md` into a new `doc/README.md`, linked from a short "Background"
   section.
+
+### Removed
+
+- `NOTES.md`. Its durable content -- the empirically verified invariants, the
+  open questions, the known gaps -- moved to `AGENTS.md`. Its status table and
+  roadmap had gone stale, and its build-failure section was actively misleading:
+  it recorded a sandbox restriction and a network block as ruled out, when the
+  cause was a firewall rule denying the Go binary specifically, which is exactly
+  why `curl` had succeeded.
 
 ### Fixed
 

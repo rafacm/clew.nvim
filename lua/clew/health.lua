@@ -22,7 +22,7 @@ function M.check()
   end
 
   start("clew: binary")
-  local bin, source = binary.find()
+  local bin, source = binary.find(cfg)
   if bin then
     ok(("found: %s (%s)"):format(bin, source))
     local res = vim.system({ bin, "--version" }, { text = true }):wait()

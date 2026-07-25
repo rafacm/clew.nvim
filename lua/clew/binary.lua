@@ -1,9 +1,22 @@
 --- Locating the `clew` binary.
 ---
---- Resolution order:
----   1. an explicit `cmd` in the user's config
----   2. `clew` on $PATH
----   3. a binary built in-tree by `make` (lazy.nvim `build = "make"`)
+--- Two things are being located, and conflating them is a bug we already shipped.
+---
+--- `cmd` is the LSP server command: a complete argv ending in the `lsp`
+--- subcommand, handed straight to |vim.lsp.config|. `bin` is the binary used to
+--- BUILD an index, which needs the `index` subcommand and its own flags.
+---
+--- `cmd` cannot simply be reused for indexing. Its subcommand is not at a known
+--- position -- `cmd` may be a wrapper such as `{"docker", "run", ..., "clew",
+--- "lsp"}` -- so there is no safe way to swap `lsp` for `index`.
+---
+--- Binary resolution order:
+---   1. an explicit `bin` in the user's config
+---   2. `cmd[1]`, when `cmd` overrides the server. Correct for the common
+---      `{"/path/to/clew", "lsp"}` shape, wrong for a wrapper, which is why
+---      `bin` exists and why |:ClewStatus| reports which source was used
+---   3. `clew` on $PATH
+---   4. a binary built in-tree by `make` (lazy.nvim `build = "make"`)
 
 local M = {}
 
@@ -18,9 +31,15 @@ local function plugin_root()
 end
 
 --- Absolute path to the clew binary, or nil if it cannot be found.
+---@param cfg ClewConfig|nil  Omitted only by callers with no config to hand.
 ---@return string|nil path
 ---@return string|nil source_description
-function M.find()
+function M.find(cfg)
+  if cfg then
+    if cfg.bin then return cfg.bin, "config bin" end
+    if cfg.cmd and cfg.cmd[1] then return cfg.cmd[1], "config cmd[1]" end
+  end
+
   local on_path = vim.fn.exepath("clew")
   if on_path ~= "" then return on_path, "$PATH" end
 
@@ -38,7 +57,7 @@ end
 ---@return string[]|nil
 function M.server_cmd(cfg)
   if cfg.cmd then return cfg.cmd end
-  local path = M.find()
+  local path = M.find(cfg)
   if not path then return nil end
   return { path, "lsp" }
 end
@@ -49,7 +68,7 @@ end
 ---@param unit string|nil
 ---@return string[]|nil
 function M.index_cmd(cfg, root, unit)
-  local path = M.find()
+  local path = M.find(cfg)
   if not path then return nil end
   local cmd = { path, "index", "--root", root, "--output", cfg.index_path }
   if unit and unit ~= "" then

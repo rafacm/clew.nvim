@@ -63,7 +63,7 @@ end
 function M.status()
   local cfg = config.options
   local project, marker = current_root()
-  local bin, source = binary.find()
+  local bin, source = binary.find(cfg)
 
   local lines = { "# clew" }
   table.insert(lines, ("root      : %s"):format(project or "<not found>"))

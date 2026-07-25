@@ -1,0 +1,179 @@
+# 1. Testing strategy: three tiers, hermetic by default
+
+- **Status:** Proposed
+- **Date:** 2026-07-25
+
+## Context
+
+clew has no tests. Not few — none. `make test` runs `go test ./...` against zero
+test files, there is no Lua harness, and there is no CI. `README.md:15` describes
+an intended v1, and `internal/indexer/java.go:40` cites
+`TestMavenSymbolsCarryCoordinates` as though it exists; it is a plan in
+`NOTES.md:73`.
+
+Three things make this more urgent than the usual backlog item.
+
+**The expensive lessons are undefended.** The Maven coordinate-stamping bug
+documented at `java.go:25-40` is *invisible locally* — navigation inside a unit
+keeps working, and the damage only appears once units merge and every symbol
+collapses into the same anonymous package. Nothing currently stops it recurring.
+
+**A dependency move just changed the code under the query layer.** Repinning to
+`github.com/scip-code/scip/bindings/go/scip v0.9.0` is what made
+`single_line_range` and `multi_line_range` exist. `OccurrenceRange` handles those
+plus the deprecated packed `range`, and no test asserts any of the three.
+
+**Platform support is claimed but unverified.** `README.md` now states macOS, Linux
+and WSL. Nothing checks any of them.
+
+ADR 2 helps here in a way worth naming: once a producer is a declaration rather
+than Go code, a producer can be *faked*. A declaration whose command copies a
+prepared index into `$CLEW_OUTPUT` exercises discovery, dispatch, path prefixing
+and merge without any indexer installed.
+
+## Decision
+
+### Three tiers
+
+**Tier 1 — unit. Hermetic: no network, no toolchain, no fixtures on disk.**
+Discovery against directory trees the test builds in `t.TempDir()`. Merge and
+query against `scip.Index` values constructed programmatically with the Go
+bindings and marshalled in memory, so there are no committed `.scip` blobs and no
+indexer involved. Lua logic under plenary. This tier runs on every change and
+finishes in seconds.
+
+**Tier 2 — producer contract. Hermetic.** A declared producer whose command copies
+a prepared index into `$CLEW_OUTPUT`, proving the path from discovery through
+dispatch, prefixing and merge without `mvn`, `npx` or a JDK. Also covers config
+loading: unknown keys rejected, user declarations shadowing embedded defaults by
+`kind`, ordering as precedence. Depends on ADR 2 being implemented.
+
+**Tier 3 — acceptance. Network and toolchains required, and excluded by default.**
+Real projects, downloaded at test time, indexed for real, asserted on. Behind
+`//go:build acceptance` so `go test ./...` never reaches the network, with
+`make test-acceptance` to run it deliberately.
+
+`make test` runs tiers 1 and 2. `make test-go`, `make test-lua` and
+`make test-acceptance` address them individually.
+
+### Test projects are downloaded, never committed
+
+Acceptance projects are fetched at test time rather than vendored into the
+repository.
+
+- **Pinned to a commit SHA**, fetched as a tarball rather than cloned. A branch
+  would let an upstream change break clew's suite with no change on clew's side.
+- **Cached outside `t.TempDir()`**, under `$XDG_CACHE_HOME/clew-test/<sha>/`, so
+  repeated local runs do not re-download. Indexing output still goes to a fresh
+  temp directory per run.
+- **Asserted on properties, not bytes.** A golden-file diff against a known-good
+  index is too brittle: SCIP output moves with indexer versions, and
+  `ScipTypeScriptPackage` is pinned to `@latest` (`typescript.go:11`), so the
+  producer moves underneath the baseline. Assert that a symbol carries a real
+  `maven/<group>/<artifact> <version>` coordinate, that a named definition
+  resolves, that a cross-unit reference resolves — claims that survive an indexer
+  upgrade.
+
+### Lua tests use plenary.nvim
+
+Surveyed five plugins: parrot.nvim, aerial.nvim and telescope.nvim all use
+plenary's busted runner with `*_spec.lua` and a `tests/minimal_init.lua`;
+lazy.nvim uses real busted via `.busted` and `nvim -l`; blink.cmp has no Lua suite
+at all, so the repo-layout precedent `NOTES.md:86` borrows from it does not extend
+to testing.
+
+plenary wins on setup cost: one `git clone --depth 1` and a minimal init, with no
+LuaRocks and no `busted` install. That matters because CI already needs Go, and
+tier 3 needs a JDK, Maven and Node. clew's Lua surface is also small and pure —
+root detection, config merge, binary resolution — with no async and no UI, so
+plenary's `describe`/`it` and luassert are sufficient.
+
+Real busted under `nvim -l` is the better long-term shape and plausibly where the
+ecosystem drifts. plenary's API is a subset of busted's, so migrating `*_spec.lua`
+later is mechanical. Revisit if the Lua surface grows.
+
+### CI
+
+GitHub Actions, matrix over Linux and macOS, running tiers 1 and 2 on every push
+and pull request. Tier 3 runs on a schedule rather than per-change, because it
+needs toolchains and minutes. WSL is claimed in `README.md` but will not be
+verified by CI; that gap is stated rather than hidden.
+
+### Tests are named for the project layout they exercise
+
+`README.md` claims three shapes -- single repository, git superproject, monorepo --
+and each is a distinct path through discovery and merge. Test names say which shape
+they cover, at every tier, so a gap in coverage is visible from the test list
+alone: `TestDiscover_Superproject`, `TestAcceptance_Monorepo_MultiModuleMaven`.
+
+| Scenario | Project | Notes |
+| --- | --- | --- |
+| `SingleRepository_Maven` | `spring-projects/spring-petclinic` | The pipeline's original validation target (`java.go:18`). Carries both `pom.xml` and `build.gradle`, so it also covers producer precedence |
+| `SingleRepository_MavenLarge` | `apache/commons-lang` | Single module, real `src/main/java`. The indexing-time measurement |
+| `SingleRepository_TypeScript` | `immerjs/immer` | `package.json` + `tsconfig.json`, no workspace file |
+| `SingleRepository_Angular` | `gothinkster/angular-realworld-example-app` | The `angular.json` branch, and the known template gap |
+| `SingleRepository_Python` | `pallets/flask` | Once a Python producer exists |
+| `SingleRepository_PythonLarge` | `django/django` | 282 MB, so schedule-only. Carries `package.json` *without* `tsconfig.json`, proving TypeScript detection does not false-positive |
+| `Monorepo_PnpmWorkspace` | `colinhacks/zod` | Root `package.json` + `tsconfig.json` + `pnpm-workspace.yaml`. clew classifies the root as one unit and never descends into `packages/`; the test pins that behaviour so a change to it is deliberate |
+| `Monorepo_MultiModuleMaven` | `apache/commons-math` | Nine `<module>` entries, no root `src/main/java`. **Currently fails** -- see below |
+| `Superproject_JavaCrossSubmodule` | `apache/commons-lang` + `apache/commons-text` | Cross-submodule symbol resolution between two Java repositories |
+| `Superproject_JavaAndAngular` | `commons-lang` + `angular-realworld` | The polyglot superproject, mirroring the layout clew was built for |
+
+Superproject fixtures are **composed at test time** from separately downloaded
+repositories. Nothing is committed; only the arrangement is synthetic, and the
+arrangement is the thing under test.
+
+### The cross-submodule fixture, and why this pair
+
+`Superproject_JavaCrossSubmodule` is the test for clew's central claim, so its
+construction matters. `commons-text` pins `commons.lang3.version` to `3.20.0`, and
+`commons-lang` publishes a `rel/commons-lang-3.20.0` tag whose pom declares exactly
+that version. Indexing `commons-lang` from source therefore yields definitions
+symbolised as:
+
+    scip-java maven maven/org.apache.commons/commons-lang3 3.20.0 org/apache/commons/lang3/StringUtils#
+
+and indexing `commons-text` yields references carrying the identical string,
+because `scip-javac` stamps classpath symbols with the same coordinate. Resolution
+across the two is a string match, which is the federation mechanism described in
+`doc/README.md`, demonstrated on real code rather than a hand-built pair.
+
+**The version alignment is the fixture, not an incidental detail.** Pinning either
+side to a SHA whose declared version differs -- a `-SNAPSHOT` pom, a newer tag --
+makes the symbol strings diverge and the test fail for a reason that has nothing to
+do with clew. Both pins must be updated together.
+
+## Known gaps this makes visible
+
+**Multi-module Maven does not work.** `indexMaven` collects sources from
+`<unit>/src/main/java` only (`java.go:74`) and errors when it finds none, while
+`Discover` stops at the first `pom.xml` without descending (`discover.go:69`). An
+aggregator pom has no sources at its root, so indexing fails outright.
+
+`discover.go:46` justifies not descending on the grounds that "scip-java already
+handles multi-module Maven and Gradle builds as a single unit" -- but `indexMaven`
+does not use scip-java's build integration, it drives `javac` directly. The comment
+describes a design the code does not implement.
+
+`Monorepo_MultiModuleMaven` asserts the current failure rather than skipping it, so
+the gap is recorded in the suite and closing it flips a test from red to green.
+
+## Open
+
+- **Which Python and TypeScript SHAs to pin.** The projects are chosen; the commits
+  are not.
+- **Whether `django` earns its 282 MB** in the scheduled tier.
+
+## Consequences
+
+- The default test run stays offline and fast, so a network failure or a missing
+  JDK never blocks development. This is not hypothetical: a firewall rule blocking
+  the Go binary cost an afternoon on 2026-07-25.
+- Real indexer behaviour is only covered on a schedule, so a regression in the
+  Maven pipeline may be found a day late rather than on the commit that caused it.
+  Accepted deliberately: the alternative is a per-change suite slow enough that
+  people stop running it.
+- Downloads make acceptance tests dependent on GitHub availability and on the
+  pinned projects remaining public.
+- plenary.nvim becomes a development dependency, cloned in CI and by
+  `tests/minimal_init.lua` locally. It is not a runtime dependency.

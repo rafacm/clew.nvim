@@ -62,6 +62,14 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
   `github.com/sourcegraph/scip v0.6.0` predated the typed occurrence ranges
   `internal/index/query.go` reads: it did not compile. Repinned to
   `github.com/scip-code/scip/bindings/go/scip v0.9.0`.
+- `:ClewIndex` ignored a configured `cmd`. `binary.server_cmd` honoured it while
+  `binary.index_cmd` resolved the binary independently, so overriding `cmd`
+  either broke indexing outright ("clew binary not found" with a working server)
+  or, worse, silently indexed with a different clew build than the one serving
+  the index. A new `bin` option names the binary used for indexing and defaults
+  to `cmd[1]`; `cmd` keeps its conventional meaning as the complete LSP server
+  argv. `:ClewStatus` and `:checkhealth clew` report which source was used, so a
+  wrapper `cmd` whose first element is not clew is visible rather than silent.
 - `README.md` documented `:ClewUnits` and `:ClewLog` as though they existed.
   `lua/clew/commands.lua` registers three commands: `ClewIndex`, `ClewStatus`
   and `ClewRestart`. Both are now marked 🚧 with the `clew units` shell

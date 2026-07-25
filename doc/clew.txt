@@ -88,10 +88,19 @@ See |clew-config| for options. No configuration is required.
       },
       auto_index = "never",      -- "never" | "save" | "manual"
       staleness_check = true,
-      cmd = nil,                 -- override the server command entirely
+      cmd = nil,                 -- override the LSP server command entirely
+      bin = nil,                 -- binary used to build the index
       server_name = "clew",      -- name registered with vim.lsp.config
     })
 <
+`cmd` is the language server command: a complete argv ending in `lsp`, passed to
+|vim.lsp.config|. `bin` is the binary |:ClewIndex| runs, which needs a different
+subcommand, so the two cannot be the same value.
+
+Setting `cmd` alone is enough for the usual `{"/path/to/clew", "lsp"}` shape:
+`bin` falls back to `cmd[1]`. Set `bin` explicitly when `cmd` is a wrapper, for
+example a `docker run` invocation, where `cmd[1]` is not the clew binary.
+|:ClewStatus| reports which source the binary came from.
 ==============================================================================
 6. ROOT DETECTION                                                  *clew-root*
 

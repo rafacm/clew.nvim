@@ -9,7 +9,8 @@
 ---@field root ClewRootConfig
 ---@field auto_index "never"|"save"|"manual"
 ---@field staleness_check boolean Warn when the index predates the working tree.
----@field cmd string[]|nil Override the server command entirely.
+---@field cmd string[]|nil Override the LSP server command entirely: a complete argv.
+---@field bin string|nil Binary used to build the index. Defaults to cmd[1], then $PATH.
 ---@field server_name string Name registered with vim.lsp.config.
 
 local M = {}
@@ -44,6 +45,7 @@ M.defaults = {
   staleness_check = true,
 
   cmd = nil,
+  bin = nil,
   server_name = "clew",
 }
 

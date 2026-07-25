@@ -187,12 +187,21 @@ WSL is claimed in `README.md` and is not verified by CI.
 ## Known gaps
 
 - **The lockfile is the only package-manager signal clew reads.** `packageManager`
-  in `package.json` — corepack's authoritative answer — is not consulted, so a
-  repository carrying two lockfiles is resolved by the precedence in `planInstall`
-  rather than by what it declares. Every fixture agrees with its lockfile so far.
-- **Yarn PnP is not handled.** `nodeLinker: pnp` installs no `node_modules`, so
-  clew reinstalls on every run and then hands `scip-typescript` a tree it cannot
-  resolve. Untested: there is no PnP fixture.
+  in `package.json` — corepack's authoritative answer — is not consulted, so clew
+  runs whichever `yarn` is on `$PATH` no matter which major the project pins, and
+  a repository carrying two lockfiles is resolved by the precedence in
+  `planInstall` rather than by what it declares. Every fixture agrees with its
+  lockfile so far. This one at least fails *loudly*: yarn classic refuses a
+  project pinning yarn 4 and names corepack in the error. See issue #8.
+- **Yarn PnP indexes silently, without its dependencies** (issue #8). `nodeLinker:
+  pnp` installs no `node_modules`, so `scip-typescript` resolves no import that
+  needs one — and reports nothing, leaving an index that looks complete and has
+  lost every external symbol. The install also repeats on every invocation, since
+  the thing clew checks for is `node_modules` itself. Confirmed against yarn 4.5.0
+  with a `nodeLinker: node-modules` control built from the same lockfile: the
+  dependency's symbol is in one index and absent from the other.
+  `YARN_NODE_LINKER=node-modules` on the install closes it without touching the
+  project's config, and is not applied yet.
 - **Stale-buffer position mapping.** The index reports positions as of the last
   index, so `gd` drifts after edits. `staleness_check` reports index age; it does
   not fix positions. This is the product risk, not a rough edge.

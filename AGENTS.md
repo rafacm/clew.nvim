@@ -54,6 +54,11 @@ These were established empirically, most of them the expensive way. Each one fai
 - **Angular templates are not indexed.** `scip-typescript` reads `.ts` and ignores
   `.html`. Component members are symbolized, but nothing references them from a
   template.
+- **`acceptance.yml`'s `paths:` filter is a hand-maintained copy of the project
+  layout.** Adding a top-level Go package without adding it there drops that
+  package out of tier 3 coverage. Nothing fails: the job simply never runs, and
+  a green pull request means less than it did. Update the filter in the same
+  commit that adds the directory. See *Testing*, below.
 
 ## Conventions
 
@@ -109,8 +114,42 @@ Two things to know before writing an acceptance test:
   unresolved path silently degrades every Maven coordinate; see the known gap
   below. A test on a raw `t.TempDir()` measures macOS's `/var` symlink.
 
-CI runs tier 1 on Linux and macOS for every push and pull request, and tier 3 on
-a daily schedule. WSL is claimed in `README.md` and is not verified by CI.
+### CI
+
+Linux and macOS for both workflows.
+
+| Workflow | Runs on | Covers |
+| --- | --- | --- |
+| `test.yml` | every push and pull request | Tier 1, `gofmt`, `go vet` (also under the `acceptance` tag), stale `doc/tags` |
+| `acceptance.yml` | daily at 04:00 UTC, plus pull requests touching indexing code | Tier 3 |
+
+Two things about `acceptance.yml` are load-bearing and easy to undo by accident.
+
+**It must not become a required check.** It depends on GitHub, Maven Central and
+the npm registry, and `ScipTypeScriptPackage` is pinned to `@latest`, so it can
+go red with no bad commit anywhere. A required check that fails for reasons the
+author cannot fix trains people to merge past red CI, and then it protects
+nothing. Advisory is the design, not an oversight — this is a branch-protection
+setting on GitHub, so nothing in the repository can enforce it.
+
+**Its `paths:` filter mirrors the project layout by hand,** and a directory
+missing from it silently loses tier 3 coverage. Listed today: `internal/**`,
+`cmd/**`, `go.mod`, `go.sum`, `Makefile`, and the workflow itself. Deliberately
+absent: `lua/**`, `plugin/**`, `doc/**` and `tests/**`, none of which can change
+what an indexer produces.
+
+**The schedule is not merely a slower per-change run.** It is the only thing that
+catches *upstream* drift: `@latest` moving underneath clew, or a pinned fixture
+being renamed or made private. No pull-request trigger can see that, so the
+schedule stays even though pull requests now run the same suite.
+
+Also note `acceptance.yml` deliberately does **not** use `setup-java`'s
+`cache: maven`. That option keys on `hashFiles('**/pom.xml')` and fails the job
+outright when nothing matches, and clew has no `pom.xml` of its own — every pom
+the suite touches belongs to a fixture and is downloaded at test time. `~/.m2`
+is cached explicitly instead.
+
+WSL is claimed in `README.md` and is not verified by CI.
 
 ## Known gaps
 

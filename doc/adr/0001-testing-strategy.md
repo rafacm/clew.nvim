@@ -248,6 +248,37 @@ The first is worth dwelling on: it validates the argument in the Context. The
 bug is invisible locally, survives every hermetic test, and was found by the
 first acceptance run on a real project.
 
+### An amendment to the CI decision
+
+The Decision above says tier 3 "runs on a schedule rather than per-change". That
+is now only half true, and the reasoning it rested on turned out not to survive
+contact with the implementation.
+
+The stated ground was that tier 3 "needs toolchains and minutes", with the
+alternative being "a per-change suite slow enough that people stop running it".
+That argument is about the **local** default, and the `acceptance` build tag
+already settles it: `go test ./...` never reaches the network whatever CI does.
+CI running the suite costs a developer nothing, because CI runs itself. The
+argument was applied to a case it does not cover.
+
+The real objection is different, and it stands: tier 3 depends on GitHub, Maven
+Central and the npm registry, and `ScipTypeScriptPackage` is pinned to
+`@latest`. It can go red with no bad commit anywhere.
+
+So tier 3 now runs **both** on a schedule and on pull requests that touch
+indexing code, with one guard: **it is advisory and must never be a required
+check.** A check that fails for reasons the author cannot fix teaches people to
+merge past red CI, at which point it protects nothing.
+
+The two triggers are not redundant. A pull-request run catches regressions clew
+introduces; the schedule is the only thing that catches upstream drift, which by
+definition arrives without a commit. Dropping either loses a distinct class of
+failure.
+
+The cost is a hand-maintained `paths:` filter that mirrors the project layout and
+fails silently when a new top-level package is not added to it. That is recorded
+as an invariant in `AGENTS.md` rather than left to memory.
+
 ### A correction to the pinned-commit table
 
 `immerjs/immer` is recorded above as `v11.1.15` at

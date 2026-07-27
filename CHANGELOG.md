@@ -5,6 +5,69 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest first.
 
+## 2026-07-27
+
+### Decided
+
+- **The product review in issue #5 is answered and closed**, split into issues
+  #10 through #16. Nothing here is implemented; this entry records the
+  conclusions so they are not re-derived. The review was directionally right and
+  factually half-stale: two of its six proposed v1 blockers had already shipped
+  as issues #2 and #3, one was inverted, and its strongest suggestion pointed at
+  the wrong target.
+- **ADR 2 must be amended before it is implemented** (issue #11). It remains
+  Accepted and unbuilt. Four things learned since it was written change what
+  implementing it means, and two contradict the ADR's own text. First,
+  `scip-typescript` no longer qualifies to move to a TOML declaration: it meets
+  the ADR's own criterion 2, per-step error policy, as of `8193ab6` — which
+  landed ten hours after `cc07ae1` finalised the ADR — so the stated outcome
+  "after this it is `scip-java` alone" is wrong. Second, the "environment
+  variables in, a SCIP index out" contract has nowhere to declare what indexers
+  omit, and three fields are already known to be omitted: `SymbolInformation.kind`,
+  `Document.language` and `Document.position_encoding`.
+- **`scip-io` is not a replacement for clew's indexing half**, and the review's
+  suggestion to lean on it was declined on evidence. Its merge deduplicates
+  overlapping documents where clew must prefix them per unit — every Java unit
+  contains `src/main/java/...`, so that is the collision, not a duplicate — and
+  nothing indicates it stamps Maven coordinates. It does belong in ADR 2 as a
+  worked example of a *declared* producer, which is the suggestion in the form
+  the repository can act on.
+- **The upstream SCIP bindings now own six primitives clew hand-rolls**
+  (issue #13). `github.com/scip-code/scip/bindings/go/scip` v0.9.0 is already a
+  direct dependency and ships `SourceRange()`, `Range`/`Position`/`Contains`,
+  `FindOccurrences`, `IsLocalSymbol`, `ParseSymbol` and `SymbolTable()`. Its
+  range decoder is better than ours: it also guards nil inner messages and covers
+  `enclosing_range`, which clew never reads. The three-encodings invariant in
+  `AGENTS.md` should become a pointer to the bindings.
+
+### Fixed
+
+- Nothing. This entry is decisions only.
+
+### Known gaps
+
+- **`clew lsp` ignores `index_path`** (issue #12). `lua/clew/lsp.lua` sends
+  `settings.clew.indexPath` and `internal/lsp/server.go` hardcodes
+  `<root>/.clew/index.scip`, never reading `settings` or `initializationOptions`.
+  Indexing, `:checkhealth clew` and the file watcher all honour the configured
+  path, so setting it reports healthy and serves nothing. Documented in three
+  places and dead in one.
+- **The position-encoding comment in `internal/lsp/server.go` is backwards**
+  (issue #14), and misled the review into promoting a non-bug to a v1 blocker.
+  Both shipping indexers emit UTF-16 code units — `scip-typescript` via
+  TypeScript's `getLineAndCharacterOfPosition`, `scip-java` via the JVM
+  `LineMap` — and neither stamps `Document.position_encoding`, so it stays
+  `Unspecified`. LSP's default is UTF-16, which is what clew advertises, so clew
+  is correct today. The real exposure is the mirror image: the first producer for
+  an indexer written in Go, Rust or C++ emits UTF-8 byte offsets, and that
+  arrives precisely when ADR 2 makes such producers cheap.
+- **`SymbolInformation.kind` cannot be fixed by reading `SymbolInformation.kind`**
+  (issue #10). `scip-java` populates it; `scip-typescript` never does, so reading
+  it alone passes against the Java fixture and leaves every TypeScript symbol
+  unkinded. Upstream has known since 2024 — `sourcegraph/scip-typescript#360`,
+  with a draft PR at `#361` abandoned since 2024-08-12 — so no fix is arriving on
+  its own.
+
 ## 2026-07-25
 
 ### Added

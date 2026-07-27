@@ -72,6 +72,13 @@ jobs:
       YARN_CACHE_FOLDER: ${{ github.workspace }}/.cache/yarn
       BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.cache/bun
       npm_config_cache: ${{ github.workspace }}/.cache/npm
+      # Yarn berry ignores YARN_CACHE_FOLDER: since yarn 4 it caches under its
+      # GLOBAL folder by default, which is a second path and a second variable.
+      # COREPACK_HOME is where the berry release itself is downloaded --
+      # SingleRepository_YarnPnP is the only test that needs one, and it pins the
+      # version through the fixture's `packageManager` field.
+      YARN_GLOBAL_FOLDER: ${{ github.workspace }}/.cache/yarn-berry
+      COREPACK_HOME: ${{ github.workspace }}/.cache/corepack
       # Turn "toolchain missing, skipping" into a failure. Without this a broken
       # setup step yields a green job that verified nothing at all.
       CLEW_TEST_REQUIRE_TOOLS: "1"
@@ -105,6 +112,11 @@ jobs:
       # the runner image, and via npm rather than a third-party action, which
       # keeps the action list to actions/*. Both tests requireTools these, and
       # CLEW_TEST_REQUIRE_TOOLS makes a failure here loud instead of a skip.
+      #
+      # This is yarn CLASSIC, and deliberately so: immer's lockfile is a v1 one.
+      # yarn 2+ is a different program, needed by SingleRepository_YarnPnP alone,
+      # which reaches it through corepack rather than replacing the binary here.
+      # corepack ships with the Node that setup-node just installed.
       - name: install the package managers the fixtures declare
         run: npm install --global yarn bun
 
@@ -143,13 +155,15 @@ jobs:
             ${{ github.workspace }}/.cache/npm
             ${{ github.workspace }}/.cache/yarn
             ${{ github.workspace }}/.cache/bun
-          # v2 because the paths above changed while the key did not: a cache is
+            ${{ github.workspace }}/.cache/yarn-berry
+            ${{ github.workspace }}/.cache/corepack
+          # v3 because the paths above changed while the key did not: a cache is
           # restored by key alone, so the old archive would have unpacked into the
           # directories it was saved from, the key would already exist, the save
           # would be skipped, and the entry would stay wrong forever. Bump this
           # whenever the path list changes.
-          key: clew-js-v2-${{ runner.os }}-${{ hashFiles('internal/acceptance/fixtures.go') }}
-          restore-keys: clew-js-v2-${{ runner.os }}-
+          key: clew-js-v3-${{ runner.os }}-${{ hashFiles('internal/acceptance/fixtures.go') }}
+          restore-keys: clew-js-v3-${{ runner.os }}-
 
       - name: acceptance
         run: make test-acceptance

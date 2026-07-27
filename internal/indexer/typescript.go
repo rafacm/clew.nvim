@@ -6,11 +6,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 // ScipTypeScriptPackage is the npm package clew invokes via npx.
 const ScipTypeScriptPackage = "@sourcegraph/scip-typescript@latest"
+
+// yarnNodeModulesLinker is the environment override that makes a yarn 2+ install
+// materialise a node_modules instead of a Plug'n'Play tree. See yarnPlan.
+const yarnNodeModulesLinker = "YARN_NODE_LINKER=node-modules"
 
 // typeScriptProducer drives scip-typescript over a Node project.
 type typeScriptProducer struct{}
@@ -47,6 +52,19 @@ func (typeScriptProducer) Index(ctx context.Context, r *runner, u Unit) (string,
 		if err := installDependencies(ctx, r, u); err != nil {
 			return "", err
 		}
+		// node_modules is both the question and the answer here: it is what
+		// decides whether to install, so an install that does not create one
+		// repeats on every single invocation AND leaves scip-typescript resolving
+		// nothing. Yarn Plug'n'Play did exactly that (issue #8), silently, and
+		// planInstall now overrides the linker to stop it. Anything else that
+		// manages to install without a node_modules -- a linker mode nobody has
+		// hit yet -- gets said out loud rather than shipping a plausible-looking
+		// index with every external symbol missing.
+		if _, err := os.Stat(filepath.Join(u.Dir, "node_modules")); os.IsNotExist(err) {
+			r.logf("  %s: WARNING the install created no node_modules. scip-typescript resolves "+
+				"imports through ordinary Node resolution, so every symbol this unit imports from a "+
+				"dependency will be MISSING from the index, and nothing downstream can tell.", u.Prefix)
+		}
 	}
 
 	out := filepath.Join(u.Dir, ".clew-unit.scip")
@@ -64,6 +82,11 @@ type installPlan struct {
 	manager  string // the binary that must be on $PATH
 	lockfile string // the file that selected it; empty when none was found
 	args     []string
+	env      []string // extra environment, `KEY=value`, added to clew's own
+
+	// note explains an env override to whoever reads the log. Empty for a plan
+	// that only runs the obvious command.
+	note string
 
 	// fallback is a second command to try when args fails. Only the npm plan
 	// carries one, and it is the single place clew may write to a build file.
@@ -71,8 +94,11 @@ type installPlan struct {
 	fallback []string
 }
 
+// String is the command as a reader would type it, environment included, so the
+// log line names everything that shaped the install.
 func (p installPlan) String() string {
-	return p.manager + " " + strings.Join(p.args, " ")
+	parts := append(append([]string{}, p.env...), p.manager)
+	return strings.Join(append(parts, p.args...), " ")
 }
 
 // planInstall picks the package manager a unit is actually developed with.
@@ -110,11 +136,7 @@ func planInstall(dir string) installPlan {
 			args:     []string{"install", "--frozen-lockfile"},
 		}
 	case has("yarn.lock"):
-		return installPlan{
-			manager:  "yarn",
-			lockfile: "yarn.lock",
-			args:     []string{"install", yarnFreezeFlag(filepath.Join(dir, "yarn.lock"))},
-		}
+		return yarnPlan(filepath.Join(dir, "yarn.lock"))
 	// bun 1.2 replaced the binary bun.lockb with the textual bun.lock. Both are
 	// still in the wild, and both mean bun.
 	case has("bun.lock"):
@@ -150,25 +172,63 @@ func planInstall(dir string) installPlan {
 	}
 }
 
-// yarnFreezeFlag returns the flag that makes `yarn install` refuse to touch the
-// lockfile, which yarn renamed between major versions: classic takes
-// --frozen-lockfile, berry (2+) takes --immutable and rejects the old spelling.
-// The lockfile itself is the version marker -- classic writes a `yarn lockfile
-// v1` banner, berry does not -- so this needs no yarn on $PATH to decide.
-func yarnFreezeFlag(lockfile string) string {
+// yarnPlan builds the install plan for a yarn unit, which needs the yarn MAJOR
+// version for two separate reasons.
+//
+// The freeze flag was renamed: classic (1.x) takes --frozen-lockfile, berry (2+)
+// takes --immutable and rejects the old spelling.
+//
+// The linker is the other, and it is the reason a berry unit needs an override at
+// all. Berry's DEFAULT install mode is Plug'n'Play: no node_modules, dependencies
+// left zipped under .yarn/cache, resolution through a generated .pnp.cjs.
+// scip-typescript resolves imports through ordinary Node resolution, so against a
+// PnP tree it finds no dependency and SAYS NOTHING -- exit 0, an index that looks
+// complete and has lost every external symbol (issue #8). Setting the linker for
+// clew's install alone materialises a node_modules and produces an index
+// identical to the same project's node-modules control, byte-for-byte in symbols.
+//
+// It is an environment variable rather than a config edit precisely so that
+// `.yarnrc.yml` and `yarn.lock` are untouched: "no build file is ever modified"
+// holds. What it does leave behind is a node_modules in a repository that
+// deliberately opted out of one, which is the honest cost of this fix. The
+// alternative -- running scip-typescript under yarn's PnP loader -- needs
+// PnP-aware TypeScript resolution inside a tool clew does not own.
+//
+// The override is unconditional for berry rather than gated on reading
+// `nodeLinker` out of `.yarnrc.yml`, and that is deliberate on two counts.
+// Absence of the key is not absence of PnP -- it IS the PnP default -- so the
+// detection would have to assume PnP for the unset case anyway. And for the two
+// modes where PnP is not in effect the override changes nothing that matters: a
+// `nodeLinker: node-modules` project was already getting exactly this tree, and a
+// `nodeLinker: pnpm` one gets the same packages with a flatter layout. In every
+// case the versions come from the lockfile, which is frozen.
+func yarnPlan(lockfile string) installPlan {
+	plan := installPlan{manager: "yarn", lockfile: filepath.Base(lockfile)}
+	if yarnIsClassic(lockfile) {
+		plan.args = []string{"install", "--frozen-lockfile"}
+		return plan
+	}
+	plan.args = []string{"install", "--immutable"}
+	plan.env = []string{yarnNodeModulesLinker}
+	plan.note = "yarn 2+ installs Plug'n'Play by default, which scip-typescript cannot resolve; " +
+		"the linker is overridden for this install only, so .yarnrc.yml and yarn.lock are untouched"
+	return plan
+}
+
+// yarnIsClassic reports whether a yarn.lock was written by yarn 1.x. The lockfile
+// itself is the version marker -- classic writes a `yarn lockfile v1` banner,
+// berry does not -- so this needs no yarn on $PATH to decide.
+func yarnIsClassic(lockfile string) bool {
 	head := make([]byte, 512)
 	f, err := os.Open(lockfile)
 	if err != nil {
 		// Unreadable but present: berry is the safer guess, since classic is the
 		// version being retired.
-		return "--immutable"
+		return false
 	}
 	defer f.Close()
 	n, _ := f.Read(head)
-	if strings.Contains(string(head[:n]), "yarn lockfile v1") {
-		return "--frozen-lockfile"
-	}
-	return "--immutable"
+	return strings.Contains(string(head[:n]), "yarn lockfile v1")
 }
 
 // installDependencies materialises node_modules for a unit that has none.
@@ -192,8 +252,21 @@ func installDependencies(ctx context.Context, r *runner, u Unit) error {
 		why = "no lockfile found"
 	}
 	r.logf("  %s: node_modules missing, running `%s` (%s)", u.Prefix, plan, why)
+	if plan.note != "" {
+		r.logf("  %s: %s", u.Prefix, plan.note)
+	}
+	// The linker override does not merely ADD a node_modules: yarn also removes
+	// the .pnp.cjs it is replacing, and some Plug'n'Play repositories commit that
+	// file (a "zero-install" setup commits .yarn/cache with it). Nothing is lost
+	// -- it is generated, and the project's own `yarn install` puts it back and
+	// takes the node_modules away again -- but a file vanishing from a working
+	// tree is not something an indexer gets to do quietly.
+	if exists(filepath.Join(u.Dir, ".pnp.cjs")) && slices.Contains(plan.env, yarnNodeModulesLinker) {
+		r.logf("  %s: NOTE this replaces the project's generated .pnp.cjs with a node_modules tree. "+
+			"Run `yarn install` to restore Plug'n'Play, which also removes the node_modules.", u.Prefix)
+	}
 
-	err := r.run(ctx, u.Dir, plan.manager, plan.args...)
+	err := r.runEnv(ctx, u.Dir, plan.env, plan.manager, plan.args...)
 	if err == nil {
 		return nil
 	}
@@ -208,7 +281,7 @@ func installDependencies(ctx context.Context, r *runner, u Unit) error {
 	r.logf("  %s: `%s` failed, most likely because %s has drifted from package.json. "+
 		"Falling back to `npm %s`, WHICH MAY REWRITE %s.\n%v",
 		u.Prefix, plan, plan.lockfile, strings.Join(plan.fallback, " "), plan.lockfile, err)
-	if err := r.run(ctx, u.Dir, plan.manager, plan.fallback...); err != nil {
+	if err := r.runEnv(ctx, u.Dir, plan.env, plan.manager, plan.fallback...); err != nil {
 		return fmt.Errorf("npm %s: %w", strings.Join(plan.fallback, " "), err)
 	}
 	return nil

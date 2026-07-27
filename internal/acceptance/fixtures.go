@@ -267,6 +267,92 @@ func superproject(t *testing.T, layout map[string]Project) string {
 	return root
 }
 
+// syntheticProject writes a project from literal file contents and returns its
+// root.
+//
+// Downloading a real repository is the default here, and for good reason: a
+// fixture nobody wrote is a fixture nobody can accidentally shape to pass. This
+// is for the case where the thing under test is a package manager's BEHAVIOUR
+// rather than any repository's code -- SingleRepository_YarnPnP is the only one
+// so far -- where a real project would cost a large download to say what a
+// handful of written lines say exactly. Whatever version matters must still be pinned in the
+// content written here.
+func syntheticProject(t *testing.T, files map[string]string) string {
+	t.Helper()
+	root := tempRoot(t)
+	for name, content := range files {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+// yarnBerryVersion is the yarn major this suite needs a PnP project from. Yarn
+// 2+ is a different program from the `yarn` on $PATH: npm's `yarn` package stops
+// at 2.4.3, and berry is distributed through corepack, which reads the version
+// out of the fixture's own `packageManager` field.
+const yarnBerryVersion = "4.5.0"
+
+// yarnBerryOnPath makes `yarn` resolve to the berry release the fixture declares,
+// for this test process and everything it spawns.
+//
+// A shim rather than an install: `npm install --global yarn` gives classic 1.x,
+// which every other yarn fixture here needs, and replacing it would break them.
+// The shim defers to corepack, which reads `packageManager` from the project it
+// is run in -- so the version pin lives in the fixture, where a reader looking at
+// the project can see it.
+//
+// t.Setenv is process-wide, so any test calling this cannot be parallel.
+func yarnBerryOnPath(t *testing.T) {
+	t.Helper()
+
+	dir := filepath.Join(t.TempDir(), "shim")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	shim := filepath.Join(dir, "yarn")
+	if err := os.WriteFile(shim, []byte("#!/bin/sh\nexec corepack yarn \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Non-interactive: corepack otherwise asks before downloading a manager it
+	// has not seen, and a prompt in CI is a hang, not a question.
+	t.Setenv("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// readAll reads several files under root, keyed by their name, so a test can
+// compare a tree before and after indexing in one comparison.
+func readAll(t *testing.T, root string, names ...string) map[string]string {
+	t.Helper()
+	out := make(map[string]string, len(names))
+	for _, name := range names {
+		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[name] = string(b)
+	}
+	return out
+}
+
+// runIn runs a command in dir and fails the test with its output if it errors.
+// For setting a fixture up -- clew's own process execution is runner.run.
+func runIn(t *testing.T, dir, name string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s %s: %v\n%s", name, strings.Join(args, " "), err, out)
+	}
+}
+
 func copyTree(src, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -437,6 +523,25 @@ func hasMavenCoordinate(symbol string) bool {
 		return false
 	}
 	return strings.HasPrefix(pkg, "maven/") && strings.Count(pkg, "/") == 2
+}
+
+// occurrenceSymbols returns every symbol occurring in one document.
+//
+// SearchSymbols does not answer this question: a symbol a document merely
+// REFERENCES, defined in a dependency, has no SymbolInformation of its own here.
+// That is precisely the symbol an unresolved import loses, so it is the one an
+// import has to be checked by.
+func occurrenceSymbols(t *testing.T, store *index.Store, path string) []string {
+	t.Helper()
+	doc, ok := store.Document(path)
+	if !ok {
+		t.Fatalf("the index holds no document at %q", path)
+	}
+	out := make([]string, 0, len(doc.Occurrences))
+	for _, occ := range doc.Occurrences {
+		out = append(out, occ.Symbol)
+	}
+	return out
 }
 
 // findSymbol returns the first global symbol satisfying pred, or fails.

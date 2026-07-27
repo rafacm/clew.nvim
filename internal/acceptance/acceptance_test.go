@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -20,10 +21,10 @@ import (
 // Tests are named for the project layout they exercise, so a gap in coverage is
 // visible from the test list alone.
 //
-// WHICH TESTS RUN IN PARALLEL, AND WHY THREE DO NOT
+// WHICH TESTS RUN IN PARALLEL, AND WHY FOUR DO NOT
 //
-// Most tests here call t.Parallel(). Three deliberately do not, and marking them
-// parallel would trade a corrupt cache for a few seconds.
+// Most tests here call t.Parallel(). Four deliberately do not, and marking three
+// of them parallel would trade a corrupt cache for a few seconds.
 //
 // The rule they enforce: NO TWO CONCURRENT TESTS MAY DOWNLOAD THE SAME ARTIFACT.
 // A Maven local repository is not safe for concurrent writes of one artifact
@@ -45,6 +46,12 @@ import (
 //     resolve again.
 //   - SingleRepository_Angular fills bun's cache for angular-realworld, which
 //     Superproject_JavaAndAngular installs again.
+//
+// The fourth, SingleRepository_YarnPnP, is sequential for a different reason and
+// warms nothing: it puts a pinned yarn berry first on $PATH with t.Setenv, which
+// is process-wide, and Go forbids that in a parallel test for exactly that
+// reason. Everything it downloads -- yarn 4 through corepack, date-fns -- is
+// wanted by no other test here.
 //
 // What is left in the parallel batch touches only artifacts nothing else in it
 // wants: commons-text, commons-math, immer's yarn graph, zod's tarball. Each
@@ -271,6 +278,139 @@ func TestAcceptance_SingleRepository_TypeScript(t *testing.T) {
 		if !bytes.Equal(before, after) {
 			t.Errorf("yarn.lock changed during indexing (%d bytes before, %d after); "+
 				"the install is not frozen", len(before), len(after))
+		}
+	})
+}
+
+// ------------------------------------------------------ SingleRepository_YarnPnP
+
+// A Yarn Plug'n'Play project: yarn 2+'s DEFAULT install mode, and one that
+// creates no node_modules at all -- dependencies stay zipped under .yarn/cache
+// and resolve through a generated .pnp.cjs.
+//
+// This is issue #8, and the claim it exists to make is about a DEPENDENCY's
+// symbol. scip-typescript resolves imports through ordinary Node resolution, so
+// against a PnP tree it finds nothing and says nothing: exit 0, and an index that
+// looks complete while every external symbol is missing. Every other TypeScript
+// test here would have passed on that index, because they all assert on the
+// project's OWN source, which resolves with no install at all. That blind spot is
+// not hypothetical -- SingleRepository_Angular was green for months while its
+// dependencies were installed by the wrong package manager entirely (issue #3).
+//
+// The fixture is written rather than downloaded, which is the exception to how
+// every other fixture here works. What is under test is a linker, not any
+// repository's code, and yarnpkg/berry would cost a large download to say what
+// these four files say. Both versions that matter are still pinned: yarn by the
+// `packageManager` field corepack reads, date-fns by an exact dependency whose
+// version is part of the symbol asserted below.
+func TestAcceptance_SingleRepository_YarnPnP(t *testing.T) {
+	// Not parallel, for two reasons. yarnBerryOnPath uses t.Setenv, which Go
+	// forbids in a parallel test because $PATH is process-wide. And it is the
+	// only test that fetches yarn berry or date-fns, so unlike the barriers above
+	// it warms nothing and blocks nothing.
+	requireTools(t, "node", "npm", "npx", "corepack")
+
+	root := syntheticProject(t, map[string]string{
+		// The version pin corepack reads is `packageManager`; date-fns is exact
+		// because the assertion names its version.
+		"package.json": `{
+  "name": "clew-pnp-probe",
+  "version": "1.0.0",
+  "packageManager": "yarn@` + yarnBerryVersion + `",
+  "dependencies": { "date-fns": "4.1.0" }
+}
+`,
+		"tsconfig.json": `{
+  "compilerOptions": { "target": "ES2020", "module": "commonjs", "moduleResolution": "node", "strict": true },
+  "include": ["src"]
+}
+`,
+		// One import from a dependency. Without node_modules this line indexes to
+		// nothing whatsoever, and that is the whole bug.
+		"src/index.ts": `import { addDays } from "date-fns";
+
+export function tomorrow(from: Date): Date {
+  return addDays(from, 1);
+}
+`,
+		// Berry defaults to PnP with no .yarnrc.yml at all; the key is written
+		// explicitly so the fixture states its own premise.
+		".yarnrc.yml": "nodeLinker: pnp\n",
+	})
+	yarnBerryOnPath(t)
+
+	// Installed as the project's own developer would, with no override: this is
+	// the tree clew has to cope with, so the test must not build it with the fix
+	// already applied.
+	runIn(t, root, "yarn", "install")
+
+	if _, err := os.Stat(filepath.Join(root, ".pnp.cjs")); err != nil {
+		t.Fatalf("yarn %s produced no .pnp.cjs, so this fixture is not a Plug'n'Play project "+
+			"and proves nothing: %v", yarnBerryVersion, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "node_modules")); err == nil {
+		t.Fatal("the Plug'n'Play install created a node_modules; the fixture no longer reproduces issue #8")
+	}
+
+	if got := units(t, root); len(got) != 1 || got[0] != ":typescript" {
+		t.Fatalf("units = %v, want the root classified as a single typescript unit", got)
+	}
+
+	// Captured AFTER the install, which is what writes yarn.lock.
+	before := readAll(t, root, ".yarnrc.yml", "yarn.lock")
+
+	store, elapsed := buildIndex(t, root)
+	t.Logf("indexed the Plug'n'Play fixture in %.1fs", elapsed.Seconds())
+
+	// The assertion the issue turns on. `date-fns 4.1.0` is the package and the
+	// version the symbol carries; the descriptor after it is scip-typescript's
+	// business and is not pinned.
+	symbols := occurrenceSymbols(t, store, "src/index.ts")
+	if !slices.ContainsFunc(symbols, func(s string) bool { return strings.Contains(s, "date-fns 4.1.0") }) {
+		t.Errorf("no occurrence in src/index.ts carries a `date-fns 4.1.0` symbol: the import resolved "+
+			"to nothing, which is issue #8 exactly -- an index that reports success with every "+
+			"external symbol missing.\nsymbols present: %q", symbols)
+	}
+
+	// clew overrides the linker with an environment variable rather than by
+	// editing the project, so both files it could have written are unchanged.
+	t.Run("TheProjectsYarnConfigurationIsNotRewritten", func(t *testing.T) {
+		for name, content := range readAll(t, root, ".yarnrc.yml", "yarn.lock") {
+			if content != before[name] {
+				t.Errorf("%s changed during indexing (%d bytes before, %d after); the linker override "+
+					"must not touch the project's own configuration", name, len(before[name]), len(content))
+			}
+		}
+	})
+
+	// The other half of issue #8: `node_modules` missing is what makes clew
+	// install, so an install that leaves none reinstalls on every invocation
+	// forever. Its existence here is what ends that loop.
+	t.Run("TheInstallDoesNotRepeatForever", func(t *testing.T) {
+		if _, err := os.Stat(filepath.Join(root, "node_modules")); err != nil {
+			t.Errorf("indexing left no node_modules, so the next invocation installs again: %v", err)
+		}
+	})
+
+	// The cost of the override, and the escape from it. Switching linkers does
+	// not merely add a node_modules: yarn removes the .pnp.cjs it replaces, and a
+	// zero-install repository commits that file. clew says so in its log, and
+	// what makes that acceptable rather than destructive is that ONE command puts
+	// it back -- so the claim is asserted rather than merely written down. See
+	// doc/adr/0003-yarn-pnp-units-install-with-the-node-modules-linker.md.
+	t.Run("PlugNPlayIsRestoredByTheProjectsOwnInstall", func(t *testing.T) {
+		if _, err := os.Stat(filepath.Join(root, ".pnp.cjs")); err == nil {
+			t.Skip("indexing left the .pnp.cjs in place; there is nothing to restore")
+		}
+		runIn(t, root, "yarn", "install")
+
+		if _, err := os.Stat(filepath.Join(root, ".pnp.cjs")); err != nil {
+			t.Errorf("`yarn install` did not restore .pnp.cjs, so clew's install is not undone by "+
+				"one command as documented: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "node_modules")); err == nil {
+			t.Error("`yarn install` left clew's node_modules behind; restoring Plug'n'Play is " +
+				"documented as removing it")
 		}
 	})
 }

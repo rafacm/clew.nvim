@@ -69,8 +69,22 @@ func (r *runner) memo(key string, fn func() (string, error)) (string, error) {
 }
 
 func (r *runner) run(ctx context.Context, dir, name string, args ...string) error {
+	return r.runEnv(ctx, dir, nil, name, args...)
+}
+
+// runEnv is run with extra `KEY=value` entries added to clew's own environment.
+//
+// Per-command and never process-wide: units are indexed concurrently, so setting
+// a variable with os.Setenv would leak into every other producer running at the
+// same time. It is also how a tool's behaviour gets changed without editing the
+// project's configuration, which "no build file is ever modified" requires --
+// yarn's node linker is the case that needs it. See yarnPlan.
+func (r *runner) runEnv(ctx context.Context, dir string, env []string, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	cmd.Stdout = io.Discard

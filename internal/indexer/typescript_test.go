@@ -40,7 +40,7 @@ func TestPlanInstall_LockfileSelectsTheManager(t *testing.T) {
 	}{
 		{"pnpm", map[string]string{"pnpm-lock.yaml": "lockfileVersion: '9.0'\n"}, "pnpm install --frozen-lockfile"},
 		{"yarn classic", map[string]string{"yarn.lock": yarnClassicLock}, "yarn install --frozen-lockfile"},
-		{"yarn berry", map[string]string{"yarn.lock": yarnBerryLock}, "yarn install --immutable"},
+		{"yarn berry", map[string]string{"yarn.lock": yarnBerryLock}, "YARN_NODE_LINKER=node-modules yarn install --immutable"},
 		{"bun", map[string]string{"bun.lock": "{}\n"}, "bun install --frozen-lockfile"},
 		{"bun pre-1.2", map[string]string{"bun.lockb": "\x00binary"}, "bun install --frozen-lockfile"},
 		{"npm", map[string]string{"package-lock.json": "{}"}, "npm ci --silent --no-audit --no-fund"},
@@ -111,6 +111,55 @@ func TestPlanInstall_OnlyNpmMayRewriteALockfile(t *testing.T) {
 	}
 	if !slicesContain(npm.fallback, "install") {
 		t.Errorf("npm fallback = %v, want it to run `npm install`", npm.fallback)
+	}
+}
+
+// Issue #8: yarn 2+ installs Plug'n'Play unless told otherwise, and against a
+// PnP tree scip-typescript resolves no dependency and reports nothing -- exit 0,
+// an index missing every external symbol. The override is the fix, and it is
+// deliberately NOT conditional on reading `nodeLinker` out of .yarnrc.yml:
+// berry's default when the key is absent is PnP, so a berry lockfile is the
+// signal. The tier 3 claim -- that the index gains the dependency's symbol -- is
+// TestAcceptance_SingleRepository_YarnPnP.
+func TestPlanInstall_YarnBerryInstallsWithTheNodeModulesLinker(t *testing.T) {
+	const override = "YARN_NODE_LINKER=node-modules"
+
+	cases := []struct {
+		name    string
+		files   map[string]string
+		wantEnv bool
+	}{
+		// No .yarnrc.yml at all is the PnP case, not the absence of one.
+		{"berry, nothing declared", map[string]string{"yarn.lock": yarnBerryLock}, true},
+		{"berry, pnp declared", map[string]string{
+			"yarn.lock": yarnBerryLock, ".yarnrc.yml": "nodeLinker: pnp\n",
+		}, true},
+		// Already installing what clew needs; the override is a no-op it need not
+		// special-case.
+		{"berry, node-modules declared", map[string]string{
+			"yarn.lock": yarnBerryLock, ".yarnrc.yml": "nodeLinker: node-modules\n",
+		}, true},
+		// Classic has no PnP default and does not know the variable.
+		{"classic", map[string]string{"yarn.lock": yarnClassicLock}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := planInstall(jsTree(t, tc.files))
+			if got := slicesContain(plan.env, override); got != tc.wantEnv {
+				t.Errorf("plan is %q; %s in env = %v, want %v", plan, override, got, tc.wantEnv)
+			}
+			// The override materialises node_modules; it must not also unfreeze
+			// the install. yarn.lock is a build file.
+			if !slicesContain(plan.args, "--immutable") && !slicesContain(plan.args, "--frozen-lockfile") {
+				t.Errorf("plan is %q, want the install still frozen", plan)
+			}
+			// A tool changing how someone's dependencies are laid out says so.
+			// The log line is the only place a user finds out, so its absence is
+			// a defect and not a style question.
+			if got := plan.note != ""; got != tc.wantEnv {
+				t.Errorf("plan is %q; explained in the log = %v, want %v", plan, got, tc.wantEnv)
+			}
+		})
 	}
 }
 

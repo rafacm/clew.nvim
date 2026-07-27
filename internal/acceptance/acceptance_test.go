@@ -342,7 +342,17 @@ export function tomorrow(from: Date): Date {
 	// Installed as the project's own developer would, with no override: this is
 	// the tree clew has to cope with, so the test must not build it with the fix
 	// already applied.
-	runIn(t, root, "yarn", "install")
+	//
+	// YARN_ENABLE_IMMUTABLE_INSTALLS is off for THIS install only. Yarn berry
+	// turns immutable installs on by default when CI is set, and a public pull
+	// request additionally enables hardened mode, so a fixture with no lockfile
+	// yet is refused outright: "YN0028: The lockfile would have been created by
+	// this install, which is explicitly forbidden." Creating the lockfile is
+	// precisely what the developer being simulated here does. It does not soften
+	// the assertion below -- clew passes --immutable on the command line, which
+	// beats any environment default, and the lockfile is compared byte for byte
+	// across the index either way.
+	runIn(t, root, []string{"YARN_ENABLE_IMMUTABLE_INSTALLS=false"}, "yarn", "install")
 
 	if _, err := os.Stat(filepath.Join(root, ".pnp.cjs")); err != nil {
 		t.Fatalf("yarn %s produced no .pnp.cjs, so this fixture is not a Plug'n'Play project "+
@@ -402,7 +412,10 @@ export function tomorrow(from: Date): Date {
 		if _, err := os.Stat(filepath.Join(root, ".pnp.cjs")); err == nil {
 			t.Skip("indexing left the .pnp.cjs in place; there is nothing to restore")
 		}
-		runIn(t, root, "yarn", "install")
+		// No immutable override here, deliberately: the lockfile exists by now
+		// and restoring Plug'n'Play must not want to rewrite it. CI's default
+		// makes that a hard assertion rather than an assumption.
+		runIn(t, root, nil, "yarn", "install")
 
 		if _, err := os.Stat(filepath.Join(root, ".pnp.cjs")); err != nil {
 			t.Errorf("`yarn install` did not restore .pnp.cjs, so clew's install is not undone by "+

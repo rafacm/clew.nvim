@@ -7,8 +7,30 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ## 2026-07-27
 
+### Added
+
+- **`TestAcceptance_SingleRepository_YarnPnP`**, tier 3, and the first fixture
+  here that is *written* rather than downloaded. What it tests is a package
+  manager's linker, not any repository's code, so four files pin it where
+  `yarnpkg/berry` would have cost a large download to say the same thing; ADR 1
+  carries the exception and the rule it leaves. It asserts on a **dependency's**
+  symbol, which is the assertion whose absence let issue #8 through — every
+  other TypeScript test here asserts on the project's own source, which resolves
+  with no install at all. It also asserts the documented recovery, that one
+  `yarn install` restores Plug'n'Play and removes clew's `node_modules`.
+- Tier 1 cases for the berry branch of `planInstall`, including that a
+  `.yarnrc.yml` with no `nodeLinker` key gets the override — absence of the key
+  is berry's PnP default, not the absence of PnP.
+
 ### Decided
 
+- **ADR 3: Yarn Plug'n'Play units are installed with the node-modules linker.**
+  The alternative that would retire it is named there: running `scip-typescript`
+  under yarn's own PnP loader materialises nothing and is the honest fix, but it
+  needs PnP-aware resolution inside a tool clew does not own. The override
+  exists only while that route is closed. Editing `.yarnrc.yml` and refusing to
+  index a PnP unit were both rejected, and the reasoning is recorded rather than
+  left to be re-derived.
 - **The product review in issue #5 is answered and closed**, split into issues
   #10 through #16. Nothing here is implemented; this entry records the
   conclusions so they are not re-derived. The review was directionally right and
@@ -42,10 +64,35 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 
 ### Fixed
 
-- Nothing. This entry is decisions only.
+- **Yarn Plug'n'Play projects index with their dependencies** (issue #8). Yarn
+  2+ installs PnP *by default* — no `node_modules`, dependencies zipped under
+  `.yarn/cache`, resolution through a generated `.pnp.cjs` — and
+  `scip-typescript` resolves imports the way Node does, so against a PnP tree it
+  resolved nothing and said nothing: exit 0, and an index missing every external
+  symbol while the project's own symbols and TypeScript's lib types made it look
+  complete. A berry unit is now installed with `YARN_NODE_LINKER=node-modules`.
+  Measured on a `date-fns@4.1.0` fixture: 18 occurrences and no `date-fns`
+  symbol before, 19 and the `addDays()` symbol after, matching a
+  `nodeLinker: node-modules` control built from the same lockfile exactly.
+- **A PnP unit no longer reinstalls on every single invocation.** `node_modules`
+  missing is what makes clew install, so under PnP that condition never became
+  false. The same override ends the loop, and an install that leaves no
+  `node_modules` is now reported rather than passed over — the second and third
+  runs of the fixture install nothing.
+- **The linker override is announced, including what it costs.** Yarn does not
+  merely add a `node_modules`: it removes the `.pnp.cjs` it replaces, which a
+  zero-install repository commits. clew logs the override, the reason, and the
+  one command that reverses both. Nothing of the project's own is written —
+  `.yarnrc.yml` and `yarn.lock` are asserted byte-identical across an index.
 
 ### Known gaps
 
+- **`packageManager` in `package.json` is still not read** (issue #18), which is
+  issue #8's other half and is untouched by the fix above. clew runs whichever
+  `yarn` is on `$PATH`, so a project pinning yarn 4 with yarn 1 installed fails
+  — loudly, in yarn's own words, naming corepack, which is why it is the lesser
+  problem. It is also why the new tier 3 fixture reaches berry through a corepack
+  shim on `$PATH` rather than by clew's own resolution.
 - **`clew lsp` ignores `index_path`** (issue #12). `lua/clew/lsp.lua` sends
   `settings.clew.indexPath` and `internal/lsp/server.go` hardcodes
   `<root>/.clew/index.scip`, never reading `settings` or `initializationOptions`.

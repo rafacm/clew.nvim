@@ -46,6 +46,13 @@ Per language, only for what you actually index:
                         clew installs with that one and never falls back
                         to npm
 
+Yarn Plug'n'Play projects need nothing extra, but clew installs them with
+YARN_NODE_LINKER=node-modules, because scip-typescript resolves imports the
+way Node does and against a Plug'n'Play tree indexes none of your
+dependencies at all. Your `.yarnrc.yml` and `yarn.lock` are untouched; a
+`node_modules/` appears and the generated `.pnp.cjs` is replaced, and one
+`yarn install` undoes both. clew logs this when it happens.
+
 ==============================================================================
 3. SETUP                                                          *clew-setup*
 

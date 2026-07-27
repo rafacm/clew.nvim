@@ -65,6 +65,19 @@ These were established empirically, most of them the expensive way. Each one fai
   worse, succeeds against a dependency tree the project has never used;
   angular-realworld is bun-managed and was indexed by npm for months without
   anything noticing. See `internal/indexer/typescript.go:planInstall`.
+- **A yarn 2+ unit is installed with `YARN_NODE_LINKER=node-modules`.** Berry's
+  *default* is Plug'n'Play — no `node_modules`, dependencies zipped in
+  `.yarn/cache`, resolution through a generated `.pnp.cjs` — and `scip-typescript`
+  resolves imports through ordinary Node resolution, so against a PnP tree it
+  finds no dependency and says nothing: exit 0, an index that looks complete with
+  every external symbol gone. `nodeLinker` absent from `.yarnrc.yml` is not the
+  absence of PnP, it *is* PnP, which is why the override is unconditional for
+  berry rather than parsed out of the config. An environment variable and not a
+  config edit, so the invariant below still holds. It does mean clew removes the
+  project's generated `.pnp.cjs` and leaves a `node_modules` behind; one
+  `yarn install` reverses both, and clew logs that when it happens. See
+  [ADR 3](doc/adr/0003-yarn-pnp-units-install-with-the-node-modules-linker.md)
+  and `internal/indexer/typescript.go:yarnPlan`.
 - **No build file is ever modified**, and a lockfile is a build file. Maven runs
   only `dependency:build-classpath`, `pom.xml` is byte-identical before and after
   indexing, and every JS install is frozen. The single exception is deliberate:
@@ -134,6 +147,12 @@ Two things to know before writing an acceptance test:
   own symlinks resolved, so that a test about paths measures clew rather than
   macOS's `/var` symlink — and so that a test *about* symlinks measures only the
   one it created.
+- **Download a project when the project is the subject; write one when a
+  toolchain is.** `syntheticProject` exists for the second case and has exactly
+  one caller, `SingleRepository_YarnPnP`, where the subject is yarn's linker and
+  a real repository would cost a large download to say the same thing. Anything
+  written this way still pins its versions. The rule and its justification are an
+  amendment to [ADR 1](doc/adr/0001-testing-strategy.md).
 
 ### CI
 
@@ -164,21 +183,26 @@ catches *upstream* drift: `@latest` moving underneath clew, or a pinned fixture
 being renamed or made private. No pull-request trigger can see that, so the
 schedule stays even though pull requests now run the same suite.
 
-**Tier 3 runs in parallel, and three tests are deliberately serial.** No two
+**Tier 3 runs in parallel, and four tests are deliberately serial.** No two
 concurrent tests may download the same artifact: a Maven local repository is not
 safe for concurrent writes of one artifact across processes, and a package
 manager's cache is no better. Go runs sequential tests before resuming parallel
 ones, so `SingleRepository_Maven`, `SingleRepository_MavenLarge` and
 `SingleRepository_Angular` act as barriers that warm `~/.m2` and bun's cache for
-the batch that follows. Adding a fixture means checking it against that rule —
-the full argument is at the top of `internal/acceptance/acceptance_test.go`. A
-flake here is worse than a slow job, because this check is advisory and a check
-people learn to ignore protects nothing.
+the batch that follows. The fourth, `SingleRepository_YarnPnP`, is serial for an
+unrelated reason and warms nothing: it puts a pinned yarn berry first on `$PATH`
+with `t.Setenv`, which is process-wide, and Go forbids that in a parallel test.
+Adding a fixture means checking it against that rule — the full argument is at
+the top of `internal/acceptance/acceptance_test.go`. A flake here is worse than a
+slow job, because this check is advisory and a check people learn to ignore
+protects nothing.
 
 **Every download the suite repeats is cached in CI**, and the list is not
-self-maintaining: fixtures by commit SHA, `~/.m2`, and the npm, yarn and bun
-download caches. The last of these was missing until immer's yarn install — 43
-seconds, the slowest test in the suite — made the omission obvious.
+self-maintaining: fixtures by commit SHA, `~/.m2`, the npm, yarn classic and bun
+download caches, and — since `SingleRepository_YarnPnP` — yarn berry's global
+folder and corepack's copy of the yarn release itself. The bun and yarn ones were
+missing until immer's yarn install — 43 seconds, the slowest test in the suite —
+made the omission obvious.
 
 **The package managers' cache directories are pinned in `acceptance.yml`'s `env:`,
 not left to their defaults.** `XDG_CACHE_HOME` is already overridden there so the
@@ -187,14 +211,21 @@ Linux its cache followed into the workspace, outside the cached path, and was
 discarded on every run. Nothing failed — the install simply never got faster,
 which is only visible if someone is timing it. `YARN_CACHE_FOLDER`,
 `BUN_INSTALL_CACHE_DIR` and `npm_config_cache` now name the paths the cache step
-stores, so the two cannot drift apart.
+stores, so the two cannot drift apart. Yarn berry needs two more of its own:
+since yarn 4 it caches under its **global** folder and ignores
+`YARN_CACHE_FOLDER` entirely, so `YARN_GLOBAL_FOLDER` and `COREPACK_HOME` are
+pinned alongside them.
 
 **The suite needs whatever package manager its fixtures declare.** clew installs a
 TypeScript unit with the manager named by its lockfile, so immer needs `yarn` and
 angular-realworld needs `bun`; `acceptance.yml` installs both with
 `npm install --global`. A fixture that switches lockfiles upstream changes which
 binaries tier 3 requires, and both tests fail with that message rather than a
-resolver error.
+resolver error. That `yarn` is **classic**, which immer's v1 lockfile wants; yarn
+2+ is a different program, needed only by `SingleRepository_YarnPnP`, which
+reaches it through a corepack shim on `$PATH` rather than replacing the binary
+the other fixtures need. The berry version is pinned in that fixture's own
+`packageManager` field, because corepack is what reads it.
 
 **`CLEW_TEST_REQUIRE_TOOLS` turns a missing toolchain into a failure,** and
 `acceptance.yml` sets it. Locally, `requireTools` skips — a laptop without a JDK
@@ -217,16 +248,10 @@ WSL is claimed in `README.md` and is not verified by CI.
   a repository carrying two lockfiles is resolved by the precedence in
   `planInstall` rather than by what it declares. Every fixture agrees with its
   lockfile so far. This one at least fails *loudly*: yarn classic refuses a
-  project pinning yarn 4 and names corepack in the error. See issue #8.
-- **Yarn PnP indexes silently, without its dependencies** (issue #8). `nodeLinker:
-  pnp` installs no `node_modules`, so `scip-typescript` resolves no import that
-  needs one — and reports nothing, leaving an index that looks complete and has
-  lost every external symbol. The install also repeats on every invocation, since
-  the thing clew checks for is `node_modules` itself. Confirmed against yarn 4.5.0
-  with a `nodeLinker: node-modules` control built from the same lockfile: the
-  dependency's symbol is in one index and absent from the other.
-  `YARN_NODE_LINKER=node-modules` on the install closes it without touching the
-  project's config, and is not applied yet.
+  project pinning yarn 4 and names corepack in the error. Split out of issue #8,
+  whose Plug'n'Play half is fixed, into issue #18 — it is also why
+  `SingleRepository_YarnPnP` reaches yarn berry through a corepack shim on
+  `$PATH` rather than through clew's own resolution.
 - **Stale-buffer position mapping.** The index reports positions as of the last
   index, so `gd` drifts after edits. `staleness_check` reports index age; it does
   not fix positions. This is the product risk, not a rough edge.

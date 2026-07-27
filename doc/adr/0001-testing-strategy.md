@@ -112,6 +112,7 @@ alone: `TestDiscover_Superproject`, `TestAcceptance_Monorepo_MultiModuleMaven`.
 | `SingleRepository_MavenLarge` | `apache/commons-lang` | Single module, real `src/main/java`. The indexing-time measurement |
 | `SingleRepository_TypeScript` | `immerjs/immer` | `package.json` + `tsconfig.json`, no workspace file. **yarn-managed**, and npm cannot install it at all, so it is also the regression test for package-manager detection (issue #3) |
 | `SingleRepository_Angular` | `gothinkster/angular-realworld-example-app` | The `angular.json` branch, and the known template gap. **bun-managed** |
+| `SingleRepository_YarnPnP` | written by the test | Yarn 2+ Plug'n'Play: no `node_modules` anywhere. Asserts a **dependency's** symbol is in the index, which is the assertion whose absence let issue #8 through. The one fixture not downloaded — see the exception below |
 | `SingleRepository_Python` | `pallets/flask` | Once a Python producer exists. `src/` layout, and every dependency is pure Python, so nothing builds from source on either platform |
 | `Monorepo_PnpmWorkspace` | `colinhacks/zod` | Root `package.json` + `tsconfig.json` + `pnpm-workspace.yaml`. clew classifies the root as one unit and never descends into `packages/`; the test pins that behaviour so a change to it is deliberate |
 | `Monorepo_MultiModuleMaven` | `apache/commons-math` | Nine `<module>` entries, no root `src/main/java`. **Currently fails** -- see below |
@@ -298,3 +299,28 @@ as an invariant in `AGENTS.md` rather than left to memory.
 needs re-resolving. The SHA is left as recorded rather than quietly changed,
 since this table is the decision; `internal/acceptance/fixtures.go` carries the
 same note.
+
+### An exception to "test projects are downloaded, never committed"
+
+`SingleRepository_YarnPnP` (issue #8, [ADR
+3](0003-yarn-pnp-units-install-with-the-node-modules-linker.md)) writes its
+fixture — four small files — rather than downloading one. It is the only test
+here that does, and the exception is narrow enough to state exactly.
+
+The Decision above rejects committed fixtures on two grounds: keeping the
+repository small, and "a fixture nobody wrote is a fixture nobody can
+accidentally shape to pass". The first does not apply to four files. The second
+is the real one, and it does not apply either, because **what is under test is a
+package manager's behaviour, not any repository's code.** The linker mode is the
+subject; the project it is applied to contributes one import statement. A real
+PnP repository — `yarnpkg/berry` is the obvious candidate — would cost a large
+download to say the same thing, and would additionally make the test hostage to
+that repository's own layout.
+
+What the exception must not lose is the pinning. Both versions that matter are
+still exact: yarn through the fixture's `packageManager` field, which is what
+corepack reads, and `date-fns@4.1.0` through a dependency whose version appears
+in the symbol the test asserts on.
+
+The rule this leaves is: **download a project when the project is the subject,
+write one when a toolchain is.**

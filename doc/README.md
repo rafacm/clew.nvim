@@ -130,3 +130,4 @@ context, decision, consequences.
 
 - [1. Testing strategy: three tiers, hermetic by default](adr/0001-testing-strategy.md)
 - [2. Producers are declared in clew's own configuration](adr/0002-producers-declared-in-clew-config.md)
+- [3. Yarn Plug'n'Play units are installed with the node-modules linker](adr/0003-yarn-pnp-units-install-with-the-node-modules-linker.md)

@@ -341,12 +341,16 @@ func readAll(t *testing.T, root string, names ...string) map[string]string {
 	return out
 }
 
-// runIn runs a command in dir and fails the test with its output if it errors.
-// For setting a fixture up -- clew's own process execution is runner.run.
-func runIn(t *testing.T, dir, name string, args ...string) {
+// runIn runs a command in dir with extra `KEY=value` environment entries, and
+// fails the test with its output if it errors. For setting a fixture up --
+// clew's own process execution is runner.runEnv, whose shape this mirrors.
+func runIn(t *testing.T, dir string, env []string, name string, args ...string) {
 	t.Helper()
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("%s %s: %v\n%s", name, strings.Join(args, " "), err, out)

@@ -75,7 +75,11 @@ These were established empirically, most of them the expensive way. Each one fai
   berry rather than parsed out of the config. An environment variable and not a
   config edit, so the invariant below still holds. It does mean clew removes the
   project's generated `.pnp.cjs` and leaves a `node_modules` behind; one
-  `yarn install` reverses both, and clew logs that when it happens. See
+  `yarn install` reverses both, and clew logs that when it happens. The honest
+  alternative — driving `scip-typescript` through yarn's PnP loader — is closed
+  upstream, not merely unbuilt: `sourcegraph/scip-typescript#259` was closed as
+  *not planned* and `microsoft/TypeScript#35206` closed unmerged after six years,
+  so do not drop this override expecting upstream to have covered it. See
   [ADR 3](doc/adr/0003-yarn-pnp-units-install-with-the-node-modules-linker.md)
   and `internal/indexer/typescript.go:yarnPlan`.
 - **No build file is ever modified**, and a lockfile is a build file. Maven runs

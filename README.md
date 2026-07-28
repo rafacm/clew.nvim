@@ -60,7 +60,7 @@ Per language, only for the languages you actually index:
 | Java / Kotlin | JDK 17+, Maven or Gradle | [`scip-java`](https://github.com/scip-code/scip-java) |
 | TypeScript / JavaScript | Node.js 18+, plus the project's own package manager — `pnpm`, `yarn` or `bun` — when its lockfile names one | [`scip-typescript`](https://github.com/sourcegraph/scip-typescript) |
 
-Yarn Plug'n'Play projects need nothing extra, but clew installs them with `YARN_NODE_LINKER=node-modules`: `scip-typescript` resolves imports the way Node does, so against a PnP tree it silently indexes none of your dependencies. Your `.yarnrc.yml` and `yarn.lock` are untouched — but a `node_modules/` appears and the generated `.pnp.cjs` is replaced, and a single `yarn install` undoes both. The reasoning is [ADR 3](doc/adr/0003-yarn-pnp-units-install-with-the-node-modules-linker.md).
+Yarn Plug'n'Play projects need nothing extra, but clew installs them with `YARN_NODE_LINKER=node-modules`: `scip-typescript` resolves imports the way Node does, so against a PnP tree it silently indexes none of your dependencies. Your `.yarnrc.yml` and `yarn.lock` are untouched — but a `node_modules/` appears and the generated `.pnp.cjs` is replaced, and a single `yarn install` undoes both. This is not a temporary workaround: upstream declined PnP support in [`scip-typescript#259`](https://github.com/sourcegraph/scip-typescript/issues/259), and TypeScript's own [native PnP pull request](https://github.com/microsoft/TypeScript/pull/35206) was closed unmerged after six years. The reasoning is [ADR 3](doc/adr/0003-yarn-pnp-units-install-with-the-node-modules-linker.md).
 
 Other languages work as soon as clew learns to drive their indexer; see [the SCIP indexer list](https://scip-code.org) for what exists.
 

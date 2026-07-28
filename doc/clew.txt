@@ -53,6 +53,10 @@ dependencies at all. Your `.yarnrc.yml` and `yarn.lock` are untouched; a
 `node_modules/` appears and the generated `.pnp.cjs` is replaced, and one
 `yarn install` undoes both. clew logs this when it happens.
 
+This is not a temporary workaround. Upstream declined Plug'n'Play support
+in scip-typescript issue 259, and TypeScript's own native Plug'n'Play pull
+request 35206 was closed unmerged after six years.
+
 ==============================================================================
 3. SETUP                                                          *clew-setup*
 

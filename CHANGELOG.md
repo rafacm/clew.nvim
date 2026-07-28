@@ -27,10 +27,19 @@ Sections are headed by date (`YYYY-MM-DD`) rather than version number, newest fi
 - **ADR 3: Yarn Plug'n'Play units are installed with the node-modules linker.**
   The alternative that would retire it is named there: running `scip-typescript`
   under yarn's own PnP loader materialises nothing and is the honest fix, but it
-  needs PnP-aware resolution inside a tool clew does not own. The override
-  exists only while that route is closed. Editing `.yarnrc.yml` and refusing to
-  index a PnP unit were both rejected, and the reasoning is recorded rather than
-  left to be re-derived.
+  needs PnP-aware resolution inside a tool clew does not own. Editing
+  `.yarnrc.yml` and refusing to index a PnP unit were both rejected, and the
+  reasoning is recorded rather than left to be re-derived.
+- **The honest fix is closed upstream, not merely unbuilt.**
+  `sourcegraph/scip-typescript#259`, "Support PnP strategy in Yarn Berry", ran
+  from 2023-05-22 to **closed as *not planned*** on 2026-01-03 — having first
+  diagnosed the mechanism precisely, down to the `parseJsonConfigFileContent`
+  call that resolves the node_modules way. `microsoft/TypeScript#35206`, native
+  PnP support, was **closed unmerged** on 2026-03-24 after six years, and yarn's
+  `plugin-compat` does not patch the method #259 names. `scip-typescript` is
+  actively maintained, so this is a declined request rather than an abandoned
+  project: the override is the answer for the foreseeable future, and ADR 3
+  states the three specific upstream events that would retire it.
 - **The product review in issue #5 is answered and closed**, split into issues
   #10 through #16. Nothing here is implemented; this entry records the
   conclusions so they are not re-derived. The review was directionally right and

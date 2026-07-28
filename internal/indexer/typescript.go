@@ -192,7 +192,11 @@ func planInstall(dir string) installPlan {
 // holds. What it does leave behind is a node_modules in a repository that
 // deliberately opted out of one, which is the honest cost of this fix. The
 // alternative -- running scip-typescript under yarn's PnP loader -- needs
-// PnP-aware TypeScript resolution inside a tool clew does not own.
+// PnP-aware TypeScript resolution inside a tool clew does not own, and upstream
+// has declined it: sourcegraph/scip-typescript#259 was closed as NOT PLANNED on
+// 2026-01-03, and microsoft/TypeScript#35206, which would have made it moot, was
+// closed unmerged after six years. Do not remove this override on the assumption
+// that upstream is about to fix it; see ADR 3 for the three things that would.
 //
 // The override is unconditional for berry rather than gated on reading
 // `nodeLinker` out of `.yarnrc.yml`, and that is deliberate on two counts.

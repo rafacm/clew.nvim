@@ -80,10 +80,33 @@ and making that resolve through PnP means yarn's TypeScript SDK and the
 `pnpapi` hooks inside a tool clew does not own — an upstream piece of work, not a
 flag clew can pass.
 
-**This is the alternative that retires the decision above.** If `scip-typescript`
-gains PnP-aware resolution, or yarn's SDK becomes drivable from outside a
-`yarn exec` context, the override should go: it exists only because the honest
-route is closed.
+**Upstream has been asked and has declined.**
+[`sourcegraph/scip-typescript#259`](https://github.com/sourcegraph/scip-typescript/issues/259),
+"Support PnP strategy in Yarn Berry", was opened 2023-05-22 and **closed as *not
+planned* on 2026-01-03**. It is not a stale request nobody read: the thread
+diagnoses the mechanism exactly, down to the call site — `scip-typescript` reaches
+TypeScript's `parseJsonConfigFileContent`, which resolves the node_modules way,
+and the fix would be to resolve through yarn's PnP API when a project enables it.
+
+The layer underneath is closed too.
+[`microsoft/TypeScript#35206`](https://github.com/microsoft/TypeScript/pull/35206),
+"Native support for PnP", was open from 2019-11-19 and **closed unmerged on
+2026-03-24**. Yarn's own [`plugin-compat`](https://github.com/yarnpkg/berry/tree/master/packages/plugin-compat)
+patches TypeScript to cover this, which is why *some* PnP toolchains work, but
+per #259 it does not patch the method `scip-typescript` calls.
+
+This matters for how the decision should be read. `scip-typescript` is actively
+maintained — commits this month, v0.4.0 in October 2025 — so this is a *declined*
+request rather than an abandoned project, and the override is not a stopgap
+waiting on a fix that is nearly ready. **It is the answer for the foreseeable
+future**, which also sharpens the argument against refusing to index a PnP unit
+below: that would leave those users with nothing indefinitely, not temporarily.
+
+**The condition that retires this decision** is therefore narrow and worth
+stating exactly: `scip-typescript` resolving through `pnpapi` (#259 reopened and
+shipped), or TypeScript gaining native PnP resolution, or `plugin-compat` growing
+a patch for the call site #259 names. Any of the three makes the honest fix
+reachable; until one lands, re-proposing it means doing that upstream work first.
 
 **Write `nodeLinker: node-modules` into the project's `.yarnrc.yml`.** Achieves
 the same install and violates the invariant outright. A tool that edits the
